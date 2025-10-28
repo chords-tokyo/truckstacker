@@ -1,0 +1,58 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "truckstacker",
+  "version": "0.1.0",
+  "identifier": "tokyo.chords.truckstacker",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "truckstacker",
+        "width": 1280,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null,
+      "capabilities": [
+        {
+          "identifier": "fs-capability",
+          "windows": ["*"],
+          "permissions": [
+            "fs:allow-read-text-file",
+            "fs:allow-write-text-file",
+            "fs:allow-appdata-read",
+            "fs:allow-appdata-write",
+            "fs:allow-appdata-meta",
+            "core:webview:allow-print",
+            "dialog:allow-save", 
+            "dialog:default"      
+          ]
+        }
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/favicon-96x96.png",
+      "icons/web-app-manifest-192x192.png",
+      "icons/web-app-manifest-512x512.png",
+      "icons/apple-touch-icon.png",
+      "icons/favicon.ico"
+    ]
+  },
+  "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": false
+    }
+  }
+}
