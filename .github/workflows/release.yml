@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - 'v*'           # v0.2.0 などで実行（ブランチ運用なら適宜変更）
+      - 'v*'
 
 jobs:
   build:
@@ -13,7 +13,7 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            args: '--target universal-apple-darwin'   # 1ジョブでarm64+x64をまとめる
+            args: '--target universal-apple-darwin'
           - os: windows-latest
             args: ''
     runs-on: ${{ matrix.os }}
@@ -27,10 +27,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'               # pnpm を使っているなら 'pnpm' に
+          cache: 'npm'  # or 'pnpm' if you're using pnpm
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -38,18 +40,18 @@ jobs:
           workspaces: './src-tauri -> target'
 
       - name: Install deps (frontend)
-        run: npm ci                  # pnpm 派なら: pnpm i --frozen-lockfile
+        run: npm ci  # or pnpm install
 
-      # 必要なら: npm run build（フロントエンドを事前ビルド）
+      # optional: build frontend manually if beforeBuildCommand is not used
       # - run: npm run build
 
-      - name: Tauri build & release
+      - name: Build & Release Tauri
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           args: ${{ matrix.args }}
-          tagName: ${{ github.ref_name }}             # 例: v0.2.0
+          tagName: ${{ github.ref_name }}
           releaseName: "TruckStacker ${{ github.ref_name }}"
           releaseBody: "Auto-built for macOS/Windows."
           releaseDraft: true
