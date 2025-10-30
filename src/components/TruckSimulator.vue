@@ -690,10 +690,10 @@ function deletePlacedEquipment() {
 
 // 回転用
 function onPlacedDblClick(i: number) {
-  // 45度ずつ回転
+  // 90度ずつ回転
   const eq = placedEquipments.value[i];
   const current = eq.rotation || 0;
-  eq.rotation = (Math.round(current / 45) * 45 + 45) % 360;
+  eq.rotation = (Math.round(current / 90) * 90 + 90) % 360;
 }
 
 const addEquipmentDialog = ref(false)
