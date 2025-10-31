@@ -384,11 +384,12 @@ import TruckBedListDialog from './dialogs/TruckBedListDialog.vue'
 import EquipmentDialog from './dialogs/EquipmentDialog.vue'
 import ConfirmDialog from './dialogs/ConfirmDialog.vue'
 import DeleteDialog from './dialogs/DeleteDialog.vue'
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { VBtn } from 'vuetify/components'
 // TauriファイルAPI
 import { readTextFile, writeTextFile, BaseDirectory } from '@tauri-apps/plugin-fs'
 import { open, save } from '@tauri-apps/plugin-dialog'
+import { listen } from '@tauri-apps/api/event'
 // 型定義のインポート
 import type { TruckBed, EquipmentCategory, Equipment, PlacedEquipment } from '../types'
 
@@ -466,10 +467,113 @@ async function saveEquipments() {
   }
 }
 
+// メニューイベントの処理
+async function handleExportData() {
+  console.log('📤 エクスポート処理開始');
+  try {
+    const filePath = await save({
+      title: 'データをエクスポート',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+      defaultPath: 'truckstacker-data.json',
+    });
+    if (!filePath) return;
+
+    const exportData = {
+      version: '1.0',
+      truckBeds: truckBeds.value,
+      equipments: equipments.value,
+      categories: equipmentCategories.value,
+      exportDate: new Date().toISOString(),
+    };
+
+    await writeTextFile(filePath, JSON.stringify(exportData, null, 2));
+    alert('データをエクスポートしました: ' + filePath);
+  } catch (e) {
+    alert('エクスポートに失敗しました: ' + e);
+  }
+}
+
+async function handleImportData() {
+  console.log('📥 インポート処理開始');
+  try {
+    const filePath = await open({
+      title: 'データをインポート',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+      multiple: false,
+    });
+    if (!filePath) return;
+
+    const path = Array.isArray(filePath) ? filePath[0] : filePath;
+    if (!path) return;
+
+    const text = await readTextFile(path);
+    const importData = JSON.parse(text);
+
+    // データの検証と適用
+    if (importData.truckBeds && Array.isArray(importData.truckBeds)) {
+      truckBeds.value = importData.truckBeds;
+      await saveTruckBeds();
+    }
+    if (importData.equipments && Array.isArray(importData.equipments)) {
+      equipments.value = importData.equipments;
+      await saveEquipments();
+    }
+    if (importData.categories && Array.isArray(importData.categories)) {
+      equipmentCategories.value = importData.categories;
+    }
+
+    alert('データをインポートしました');
+  } catch (e) {
+    alert('インポートに失敗しました: ' + e);
+  }
+}
+
+// リスナーのクリーンアップ用
+const unlisteners: Array<() => void> = []
+
 // onMountedで読み込み
-onMounted(() => {
+onMounted(async () => {
+  console.log('🚀 コンポーネントマウント開始');
   loadTruckBeds()
   loadEquipments()
+  
+  // メニューイベントのリスナー登録
+  console.log('🎯 メニューイベントリスナー登録中...');
+  
+  try {
+    const unlistenExport = await listen('menu-export-data', (event: any) => {
+      console.log('🔥 menu-export-data イベント受信:', event);
+      handleExportData()
+    })
+    console.log('📡 Export リスナー登録完了:', unlistenExport);
+    unlisteners.push(unlistenExport)
+    
+    const unlistenImport = await listen('menu-import-data', (event: any) => {
+      console.log('🔥 menu-import-data イベント受信:', event);
+      handleImportData()
+    })
+    console.log('📡 Import リスナー登録完了:', unlistenImport);
+    unlisteners.push(unlistenImport)
+    
+  } catch (error) {
+    console.error('❌ イベントリスナー登録エラー:', error);
+  }
+  
+  console.log('✅ メニューイベントリスナー登録完了');
+  console.log('🎉 コンポーネントマウント完了');
+})
+
+// コンポーネントの破棄時にリスナーをクリーンアップ
+onUnmounted(() => {
+  console.log('🧹 イベントリスナーのクリーンアップ');
+  unlisteners.forEach(unlisten => {
+    try {
+      unlisten()
+    } catch (error) {
+      console.error('リスナークリーンアップエラー:', error)
+    }
+  })
+  unlisteners.length = 0
 })
 
 // 荷台一覧ダイアログ

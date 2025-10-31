@@ -33,7 +33,10 @@
             "fs:allow-appdata-meta",
             "core:webview:allow-print",
             "dialog:allow-save", 
-            "dialog:default"      
+            "dialog:default",
+            "core:event:allow-listen",
+            "core:event:allow-emit",
+            "core:event:default"
           ]
         }
       ]
