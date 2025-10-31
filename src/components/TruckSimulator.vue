@@ -52,7 +52,7 @@
                       :height="selectedTruckBedObj.height"
                       fill="#e0e0e0"
                       stroke="#888"
-                      stroke-width="2"
+                      stroke-width="1"
                     />
                     <g v-for="(eq, i) in placedEquipments" :key="eq.name + '-' + i"
                       :transform="(() => {
@@ -727,7 +727,7 @@ function addNewEquipment(data?: any) {
   const h = equipmentData.height
   const fill = equipmentData.fill || '#90caf9'
   let svg = ''
-  const strokeWidth = 2
+  const strokeWidth = 1
   if (wTop !== wBottom) {
     // 台形 - stroke分を考慮してサイズ調整
     const adjustedTop = wTop - strokeWidth
@@ -898,7 +898,7 @@ function saveEditEquipment(data?: any) {
   const newHeight = h
   let newSvg = old.svg
   // SVG再生成: 台形/長方形を判定
-  const strokeWidth = 2
+  const strokeWidth = 1
   if (wTop !== wBottom) {
     // 台形 - stroke分を考慮してサイズ調整
     const adjustedTop = wTop - strokeWidth
