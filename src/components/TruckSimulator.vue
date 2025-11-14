@@ -76,19 +76,21 @@
                                 stroke-width="1"
                               />
                               <g v-for="(eq, i) in placedEquipments" :key="eq.name + '-' + i"
-                                :transform="(() => {
-                                  let cx = eq.width / 2;
-                                  if (eq.top !== undefined && eq.bottom !== undefined && eq.top !== eq.bottom) {
-                                    cx = ((eq.bottom - eq.top) / 2) + eq.top / 2;
-                                  }
-                                  return `translate(${eq.x},${eq.y}) rotate(${eq.rotation || 0},${cx},${eq.height/2})`;
-                                })()"
+                                :transform="`translate(${eq.x},${eq.y})`"
                                 @mousedown="onPlacedMouseDown(i, $event, 1)"
                                 @contextmenu.prevent.stop="onPlacedContextMenu(i, $event, 1)"
                                 @dblclick.stop.prevent="onPlacedDblClick(i, 1)"
                                 style="cursor: move;"
                               >
-                                <g v-html="eq.svg"></g>
+                                <g v-html="eq.svg" 
+                                  :transform="(() => {
+                                    let cx = eq.width / 2;
+                                    if (eq.top !== undefined && eq.bottom !== undefined && eq.top !== eq.bottom) {
+                                      cx = ((eq.bottom - eq.top) / 2) + eq.top / 2;
+                                    }
+                                    return `rotate(${eq.rotation || 0},${cx},${eq.height/2})`;
+                                  })()"
+                                ></g>
                                 <text
                                   :x="(eq.top !== undefined && eq.bottom !== undefined && eq.top !== eq.bottom)
                                         ? (((eq.bottom - eq.top) / 2) + eq.top / 2)
@@ -149,19 +151,21 @@
                                 stroke-width="1"
                               />
                               <g v-for="(eq, i) in placedEquipments2" :key="eq.name + '-' + i"
-                                :transform="(() => {
-                                  let cx = eq.width / 2;
-                                  if (eq.top !== undefined && eq.bottom !== undefined && eq.top !== eq.bottom) {
-                                    cx = ((eq.bottom - eq.top) / 2) + eq.top / 2;
-                                  }
-                                  return `translate(${eq.x},${eq.y}) rotate(${eq.rotation || 0},${cx},${eq.height/2})`;
-                                })()"
+                                :transform="`translate(${eq.x},${eq.y})`"
                                 @mousedown="onPlacedMouseDown(i, $event, 2)"
                                 @contextmenu.prevent.stop="onPlacedContextMenu(i, $event, 2)"
                                 @dblclick.stop.prevent="onPlacedDblClick(i, 2)"
                                 style="cursor: move;"
                               >
-                                <g v-html="eq.svg"></g>
+                                <g v-html="eq.svg" 
+                                  :transform="(() => {
+                                    let cx = eq.width / 2;
+                                    if (eq.top !== undefined && eq.bottom !== undefined && eq.top !== eq.bottom) {
+                                      cx = ((eq.bottom - eq.top) / 2) + eq.top / 2;
+                                    }
+                                    return `rotate(${eq.rotation || 0},${cx},${eq.height/2})`;
+                                  })()"
+                                ></g>
                                 <text
                                   :x="(eq.top !== undefined && eq.bottom !== undefined && eq.top !== eq.bottom)
                                         ? (((eq.bottom - eq.top) / 2) + eq.top / 2)
@@ -830,7 +834,28 @@ const draggingIndex = ref<number|null>(null)
 const draggingTruck = ref<number|null>(null)
 const dragOffset = reactive({ x: 0, y: 0 })
 
+// 微回転モード用の状態
+const fineRotationMode = ref(false)
+const fineRotationStartY = ref(0)
+const fineRotationBaseRotation = ref(0)
+
 function onPlacedMouseDown(i: number, e: MouseEvent, truckNum: number) {
+  // シフトキーが押されている場合は微回転モードを開始
+  if (e.shiftKey) {
+    fineRotationMode.value = true
+    fineRotationStartY.value = e.clientY
+    const equipmentArray = truckNum === 1 ? placedEquipments.value : placedEquipments2.value
+    fineRotationBaseRotation.value = equipmentArray[i].rotation || 0
+    draggingIndex.value = i
+    draggingTruck.value = truckNum
+    
+    // 微回転用イベントリスナーを追加
+    window.addEventListener('mousemove', onFineRotationMove)
+    window.addEventListener('mouseup', onFineRotationEnd)
+    
+    e.preventDefault()
+    return
+  }
   
   draggingIndex.value = i
   draggingTruck.value = truckNum
@@ -909,7 +934,6 @@ function onPlacedMouseMove(e: MouseEvent) {
   const mouseY = ((e.clientY - rect.top) / rect.height) * targetTruckBed.height
 
   // 台形の左右端をSVG描画ロジックと一致させる
-  let centerY;
   if (eq.top !== undefined && eq.bottom !== undefined && eq.top !== eq.bottom) {
     // 台形：回転の有無に関わらず統一した処理
     const cx = ((eq.bottom - eq.top) / 2) + eq.top / 2;
@@ -919,25 +943,54 @@ function onPlacedMouseMove(e: MouseEvent) {
     eq.x = mouseX - dragOffset.x;
     eq.y = mouseY - dragOffset.y;
     
-    // 境界制限：回転を考慮した外接矩形で制限
+    // 境界制限：回転を考慮した正確な頂点計算
     if (eq.rotation && (eq.rotation % 360) !== 0) {
       const radian = (eq.rotation * Math.PI) / 180;
-      const cos = Math.abs(Math.cos(radian));
-      const sin = Math.abs(Math.sin(radian));
-      const maxW = Math.max(eq.top, eq.bottom);
-      const bboxWidth = maxW * cos + eq.height * sin;
-      const bboxHeight = maxW * sin + eq.height * cos;
       
-      // 回転中心位置を計算
-      const centerX = eq.x + cx;
-      const centerY = eq.y + cy;
+      // 台形の4頂点を定義（回転前、左上基準）
+      const diff = (eq.bottom - eq.top) / 2;
+      const vertices = [
+        { x: diff, y: 0 },              // 上辺左端
+        { x: eq.bottom - diff, y: 0 },  // 上辺右端
+        { x: eq.bottom, y: eq.height }, // 下辺右端
+        { x: 0, y: eq.height }          // 下辺左端
+      ];
       
-      // 境界内に収める
-      const limitedCenterX = Math.max(bboxWidth / 2, Math.min(centerX, targetTruckBed.width - bboxWidth / 2));
-      const limitedCenterY = Math.max(bboxHeight / 2, Math.min(centerY, targetTruckBed.height - bboxHeight / 2));
+      // 回転中心からの相対座標で各頂点を回転
+      const rotatedVertices = vertices.map(v => {
+        const relX = v.x - cx;
+        const relY = v.y - cy;
+        return {
+          x: relX * Math.cos(radian) - relY * Math.sin(radian) + cx,
+          y: relX * Math.sin(radian) + relY * Math.cos(radian) + cy
+        };
+      });
       
-      eq.x = limitedCenterX - cx;
-      eq.y = limitedCenterY - cy;
+      // 回転後の外接矩形を計算
+      const xs = rotatedVertices.map(v => v.x);
+      const ys = rotatedVertices.map(v => v.y);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      
+      // 現在の位置での外接矩形の絶対座標
+      const currentMinX = eq.x + minX;
+      const currentMaxX = eq.x + maxX;
+      const currentMinY = eq.y + minY;
+      const currentMaxY = eq.y + maxY;
+      
+      // 境界チェックと調整
+      let adjustX = 0;
+      let adjustY = 0;
+      
+      if (currentMinX < 0) adjustX = -currentMinX;
+      if (currentMaxX > targetTruckBed.width) adjustX = targetTruckBed.width - currentMaxX;
+      if (currentMinY < 0) adjustY = -currentMinY;
+      if (currentMaxY > targetTruckBed.height) adjustY = targetTruckBed.height - currentMaxY;
+      
+      eq.x += adjustX;
+      eq.y += adjustY;
     } else {
       // 回転していない場合の境界制限
       const diff = (eq.bottom - eq.top) / 2;
@@ -945,18 +998,64 @@ function onPlacedMouseMove(e: MouseEvent) {
       eq.y = Math.max(0, Math.min(eq.y, targetTruckBed.height - eq.height));
     }
   } else {
-    // 長方形
-    const rad = ((eq.rotation || 0) * Math.PI) / 180;
-    const cos = Math.abs(Math.cos(rad));
-    const sin = Math.abs(Math.sin(rad));
-    const bboxWidth = eq.width * cos + eq.height * sin;
-    const bboxHeight = eq.width * sin + eq.height * cos;
-    let centerX = mouseX - dragOffset.x + eq.width / 2;
-    centerY = mouseY - dragOffset.y + eq.height / 2;
-    centerX = Math.max(bboxWidth / 2, Math.min(centerX, targetTruckBed.width - bboxWidth / 2));
-    centerY = Math.max(bboxHeight / 2, Math.min(centerY, targetTruckBed.height - bboxHeight / 2));
-    eq.x = centerX - eq.width / 2;
-    eq.y = centerY - eq.height / 2;
+    // 長方形：マウス位置から座標を設定
+    eq.x = mouseX - dragOffset.x;
+    eq.y = mouseY - dragOffset.y;
+    
+    // 回転を考慮した境界制限
+    if (eq.rotation && (eq.rotation % 360) !== 0) {
+      const radian = (eq.rotation * Math.PI) / 180;
+      const cx = eq.width / 2;
+      const cy = eq.height / 2;
+      
+      // 長方形の4頂点を定義（回転前）
+      const vertices = [
+        { x: 0, y: 0 },                    // 左上
+        { x: eq.width, y: 0 },             // 右上
+        { x: eq.width, y: eq.height },     // 右下
+        { x: 0, y: eq.height }             // 左下
+      ];
+      
+      // 回転中心からの相対座標で各頂点を回転
+      const rotatedVertices = vertices.map(v => {
+        const relX = v.x - cx;
+        const relY = v.y - cy;
+        return {
+          x: relX * Math.cos(radian) - relY * Math.sin(radian) + cx,
+          y: relX * Math.sin(radian) + relY * Math.cos(radian) + cy
+        };
+      });
+      
+      // 回転後の外接矩形を計算
+      const xs = rotatedVertices.map(v => v.x);
+      const ys = rotatedVertices.map(v => v.y);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      
+      // 現在の位置での外接矩形の絶対座標
+      const currentMinX = eq.x + minX;
+      const currentMaxX = eq.x + maxX;
+      const currentMinY = eq.y + minY;
+      const currentMaxY = eq.y + maxY;
+      
+      // 境界チェックと調整
+      let adjustX = 0;
+      let adjustY = 0;
+      
+      if (currentMinX < 0) adjustX = -currentMinX;
+      if (currentMaxX > targetTruckBed.width) adjustX = targetTruckBed.width - currentMaxX;
+      if (currentMinY < 0) adjustY = -currentMinY;
+      if (currentMaxY > targetTruckBed.height) adjustY = targetTruckBed.height - currentMaxY;
+      
+      eq.x += adjustX;
+      eq.y += adjustY;
+    } else {
+      // 回転なしの場合はシンプルな境界制限
+      eq.x = Math.max(0, Math.min(eq.x, targetTruckBed.width - eq.width));
+      eq.y = Math.max(0, Math.min(eq.y, targetTruckBed.height - eq.height));
+    }
   }
   
   // 荷台が変わった場合は機材を移動
@@ -985,6 +1084,37 @@ function onPlacedMouseUp() {
   
   window.removeEventListener('mousemove', onPlacedMouseMove)
   window.removeEventListener('mouseup', onPlacedMouseUp)
+}
+
+// 微回転モード用の関数
+function onFineRotationMove(e: MouseEvent) {
+  if (!fineRotationMode.value || draggingIndex.value === null || draggingTruck.value === null) return
+  
+  const equipmentArray = draggingTruck.value === 1 ? placedEquipments.value : placedEquipments2.value
+  const eq = equipmentArray[draggingIndex.value]
+  if (!eq) return
+  
+  // Y座標の変化量から回転角度を計算（5ピクセルで1度）
+  const deltaY = fineRotationStartY.value - e.clientY
+  const rotationDelta = Math.round(deltaY / 5)
+  
+  // 基準回転角度に変化量を加算
+  let newRotation = fineRotationBaseRotation.value + rotationDelta
+  
+  // 0-359度の範囲に正規化
+  while (newRotation < 0) newRotation += 360
+  while (newRotation >= 360) newRotation -= 360
+  
+  eq.rotation = newRotation
+}
+
+function onFineRotationEnd() {
+  fineRotationMode.value = false
+  draggingIndex.value = null
+  draggingTruck.value = null
+  
+  window.removeEventListener('mousemove', onFineRotationMove)
+  window.removeEventListener('mouseup', onFineRotationEnd)
 }
 
 // 右クリックメニュー用
