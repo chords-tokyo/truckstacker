@@ -61,9 +61,6 @@
                       <div v-if="selectedTruckBedObj" class="d-flex flex-column align-center">
                         <div class="mb-2 text-subtitle-2 text-primary">荷台1</div>
                         <div id="truck-bed-area" class="d-flex ga-8">
-                          <div class="mt-2 d-flex flex-column ga-2 no-print">
-                            <v-btn size="small" color="secondary" @click="clearDialog = true">クリア1</v-btn>
-                          </div>
                           <div id="truck-bed-svg-area">
                             <svg
                               :width="selectedTruckBedObj.width"
@@ -89,12 +86,7 @@
                                 @mousedown="onPlacedMouseDown(i, $event, 1)"
                                 @contextmenu.prevent.stop="onPlacedContextMenu(i, $event, 1)"
                                 @dblclick.stop.prevent="onPlacedDblClick(i, 1)"
-                                :style="{
-                                  cursor: 'move',
-                                  opacity: (draggingTruck === 1 && draggingIndex === i) 
-                                    ? (ghostOpacity < 1 ? 0.5 : 0) 
-                                    : 1
-                                }"
+                                style="cursor: move;"
                               >
                                 <g v-html="eq.svg"></g>
                                 <text
@@ -124,6 +116,9 @@
                                 {{ name }} × {{ count }}
                               </div>
                             </div>
+                            <div class="mt-2 d-flex flex-column ga-2 no-print">
+                              <v-btn size="small" color="secondary" @click="clearDialog = true">クリア</v-btn>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -139,9 +134,6 @@
                       <div v-if="selectedTruckBedObj2" class="d-flex flex-column align-center">
                         <div class="mb-2 text-subtitle-2 text-secondary">荷台2</div>
                         <div id="truck-bed-area-2" class="d-flex ga-8">
-                          <div class="mt-2 d-flex flex-column ga-2 no-print">
-                            <v-btn size="small" color="secondary" @click="clearDialog2 = true">クリア2</v-btn>
-                          </div>
                           <div id="truck-bed-svg-area-2">
                             <svg
                               :width="selectedTruckBedObj2.width"
@@ -167,12 +159,7 @@
                                 @mousedown="onPlacedMouseDown(i, $event, 2)"
                                 @contextmenu.prevent.stop="onPlacedContextMenu(i, $event, 2)"
                                 @dblclick.stop.prevent="onPlacedDblClick(i, 2)"
-                                :style="{
-                                  cursor: 'move',
-                                  opacity: (draggingTruck === 2 && draggingIndex === i) 
-                                    ? (ghostOpacity < 1 ? 0.5 : 0) 
-                                    : 1
-                                }"
+                                style="cursor: move;"
                               >
                                 <g v-html="eq.svg"></g>
                                 <text
@@ -201,6 +188,9 @@
                               <div v-for="(count, name) in equipmentCountMap2" :key="name">
                                 {{ name }} × {{ count }}
                               </div>
+                            </div>
+                            <div class="mt-2 d-flex flex-column ga-2 no-print">
+                              <v-btn size="small" color="secondary" @click="clearDialog2 = true">クリア</v-btn>
                             </div>
                           </div>
                         </div>
@@ -232,41 +222,7 @@
                   <div @click="deletePlacedEquipment" style="padding: 8px 16px;">削除</div>
                 </div>
 
-                <!-- ドラッグ中のゴースト表示 -->
-                <div
-                  v-if="ghostEquipment"
-                  :style="{
-                    position: 'fixed',
-                    top: ghostPosition.y + 'px',
-                    left: ghostPosition.x + 'px',
-                    pointerEvents: 'none',
-                    zIndex: 9999,
-                    opacity: ghostOpacity
-                  }"
-                >
-                  <svg
-                    :width="Math.max(ghostEquipment.width, ghostEquipment.height)"
-                    :height="Math.max(ghostEquipment.width, ghostEquipment.height)"
-                    :viewBox="`0 0 ${ghostEquipment.width} ${ghostEquipment.height}`"
-                  >
-                    <g :transform="`rotate(${ghostEquipment.rotation || 0},${ghostEquipment.width/2},${ghostEquipment.height/2})`">
-                      <g v-html="ghostEquipment.svg"></g>
-                      <text
-                        :x="(ghostEquipment.top !== undefined && ghostEquipment.bottom !== undefined && ghostEquipment.top !== ghostEquipment.bottom)
-                              ? (((ghostEquipment.bottom - ghostEquipment.top) / 2) + ghostEquipment.top / 2)
-                              : (ghostEquipment.width / 2)"
-                        :y="ghostEquipment.height / 2"
-                        text-anchor="middle"
-                        dominant-baseline="middle"
-                        font-size="10"
-                        fill="#222"
-                        style="pointer-events: none; user-select: none;"
-                      >
-                        {{ ghostEquipment.name }}
-                      </text>
-                    </g>
-                  </svg>
-                </div>
+
               </v-col>
             </v-row>
           </v-col>
@@ -873,11 +829,9 @@ const newTruckBed = reactive({
 const draggingIndex = ref<number|null>(null)
 const draggingTruck = ref<number|null>(null)
 const dragOffset = reactive({ x: 0, y: 0 })
-const ghostEquipment = ref<PlacedEquipment | null>(null)
-const ghostPosition = reactive({ x: 0, y: 0 })
-const ghostOpacity = ref(1)
 
 function onPlacedMouseDown(i: number, e: MouseEvent, truckNum: number) {
+  
   draggingIndex.value = i
   draggingTruck.value = truckNum
   const svg = (e.target as SVGElement).ownerSVGElement
@@ -894,23 +848,10 @@ function onPlacedMouseDown(i: number, e: MouseEvent, truckNum: number) {
   
   const equipmentArray = truckNum === 1 ? placedEquipments.value : placedEquipments2.value
   const eq = equipmentArray[i]
+  
+  // シンプルなオフセット計算
   dragOffset.x = mouseX - eq.x
   dragOffset.y = mouseY - eq.y
-  
-  // ゴースト表示用にデータをコピー
-  ghostEquipment.value = { ...eq }
-  // クリック位置での相対位置を計算（SVG座標をスクリーン座標に変換）
-  const svgRect = svg.getBoundingClientRect()
-  const clickOffsetX = ((mouseX - eq.x) / truckBedObj.width) * svgRect.width
-  const clickOffsetY = ((mouseY - eq.y) / truckBedObj.height) * svgRect.height
-  
-  // ゴーストのSVGが正方形になった分の調整
-  const maxDimension = Math.max(eq.width, eq.height)
-  const offsetAdjustX = (maxDimension - eq.width) / 2
-  const offsetAdjustY = (maxDimension - eq.height) / 2
-  
-  ghostPosition.x = e.clientX - clickOffsetX - offsetAdjustX
-  ghostPosition.y = e.clientY - clickOffsetY - offsetAdjustY
   
   // ドラッグ中のテキスト選択を完全に防止
   document.body.style.userSelect = 'none'
@@ -921,31 +862,9 @@ function onPlacedMouseDown(i: number, e: MouseEvent, truckNum: number) {
   window.addEventListener('mousemove', onPlacedMouseMove)
   window.addEventListener('mouseup', onPlacedMouseUp)
 }
+
 function onPlacedMouseMove(e: MouseEvent) {
   if (draggingIndex.value === null || draggingTruck.value === null) return
-  
-  // ゴースト位置を常に更新（ドラッグオフセットを維持）
-  if (ghostEquipment.value) {
-    // 元の荷台の参照を取得
-    const originSvg = draggingTruck.value === 1 
-      ? document.querySelector('#truck-bed-svg-area svg') as SVGSVGElement
-      : document.querySelector('#truck-bed-svg-area-2 svg') as SVGSVGElement
-    const originTruckBed = draggingTruck.value === 1 ? selectedTruckBedObj.value : selectedTruckBedObj2.value
-    
-    if (originSvg && originTruckBed) {
-      const originRect = originSvg.getBoundingClientRect()
-      const clickOffsetX = (dragOffset.x / originTruckBed.width) * originRect.width
-      const clickOffsetY = (dragOffset.y / originTruckBed.height) * originRect.height
-      
-      // ゴーストのSVGが正方形になった分の調整
-      const maxDimension = Math.max(ghostEquipment.value.width, ghostEquipment.value.height)
-      const offsetAdjustX = (maxDimension - ghostEquipment.value.width) / 2
-      const offsetAdjustY = (maxDimension - ghostEquipment.value.height) / 2
-      
-      ghostPosition.x = e.clientX - clickOffsetX - offsetAdjustX
-      ghostPosition.y = e.clientY - clickOffsetY - offsetAdjustY
-    }
-  }
   
   // 現在ドラッグ中の機材の配列と荷台オブジェクトを取得
   const currentEquipmentArray = draggingTruck.value === 1 ? placedEquipments.value : placedEquipments2.value
@@ -983,55 +902,6 @@ function onPlacedMouseMove(e: MouseEvent) {
     }
   }
 
-  // ゴーストの透明度を設定（機材が荷台からはみ出しているかで変更）
-  let isEquipmentFullyInside = false
-  
-  if (ghostEquipment.value) {
-    // ゴーストの境界を計算（回転と正方形SVGを考慮）
-    const maxDimension = Math.max(ghostEquipment.value.width, ghostEquipment.value.height)
-    const rotation = ghostEquipment.value.rotation || 0
-    
-    // 回転を考慮した実際のサイズ
-    let actualWidth, actualHeight
-    if (rotation === 90 || rotation === 270) {
-      actualWidth = ghostEquipment.value.height
-      actualHeight = ghostEquipment.value.width
-    } else {
-      actualWidth = ghostEquipment.value.width
-      actualHeight = ghostEquipment.value.height
-    }
-    
-    // 正方形SVGの中央に配置された機材の境界
-    const offsetX = (maxDimension - actualWidth) / 2
-    const offsetY = (maxDimension - actualHeight) / 2
-    
-    const ghostLeft = ghostPosition.x + offsetX
-    const ghostRight = ghostPosition.x + offsetX + actualWidth
-    const ghostTop = ghostPosition.y + offsetY
-    const ghostBottom = ghostPosition.y + offsetY + actualHeight
-    
-    // 荷台1エリア内に完全に収まっているかチェック
-    if (svg1 && selectedTruckBedObj.value) {
-      const rect1 = svg1.getBoundingClientRect()
-      if (ghostLeft >= rect1.left && ghostRight <= rect1.right && 
-          ghostTop >= rect1.top && ghostBottom <= rect1.bottom) {
-        isEquipmentFullyInside = true
-      }
-    }
-    
-    // 荷台2エリア内に完全に収まっているかチェック
-    if (!isEquipmentFullyInside && svg2 && selectedTruckBedObj2.value) {
-      const rect2 = svg2.getBoundingClientRect()
-      if (ghostLeft >= rect2.left && ghostRight <= rect2.right && 
-          ghostTop >= rect2.top && ghostBottom <= rect2.bottom) {
-        isEquipmentFullyInside = true
-      }
-    }
-  }
-  
-  // 機材が荷台エリア内に完全に収まっていれば不透明、はみ出していれば半透明
-  ghostOpacity.value = isEquipmentFullyInside ? 1 : 0.5
-
   if (!targetSvg || !targetTruckBed) return
   
   const rect = targetSvg.getBoundingClientRect()
@@ -1039,25 +909,41 @@ function onPlacedMouseMove(e: MouseEvent) {
   const mouseY = ((e.clientY - rect.top) / rect.height) * targetTruckBed.height
 
   // 台形の左右端をSVG描画ロジックと一致させる
-  let newX;
   let centerY;
   if (eq.top !== undefined && eq.bottom !== undefined && eq.top !== eq.bottom) {
-    // 台形
-    const diff = (eq.bottom - eq.top) / 2;
-    newX = mouseX - dragOffset.x;
-    // 左端: newX + diff >= 0, 右端: newX + eq.bottom - diff <= width
-    newX = Math.max(-diff, newX);
-    newX = Math.min(targetTruckBed.width - eq.bottom + diff, newX);
-    // Y方向は従来通り外接矩形で制限
-    const rad = ((eq.rotation || 0) * Math.PI) / 180;
-    const cos = Math.abs(Math.cos(rad));
-    const sin = Math.abs(Math.sin(rad));
-    const maxW = Math.max(eq.top, eq.bottom);
-    const bboxHeight = maxW * sin + eq.height * cos;
-    centerY = mouseY - dragOffset.y + eq.height / 2;
-    centerY = Math.max(bboxHeight / 2, Math.min(centerY, targetTruckBed.height - bboxHeight / 2));
-    eq.x = newX;
-    eq.y = centerY - eq.height / 2;
+    // 台形：回転の有無に関わらず統一した処理
+    const cx = ((eq.bottom - eq.top) / 2) + eq.top / 2;
+    const cy = eq.height / 2;
+    
+    // マウス位置から機材の左上座標を直接計算
+    eq.x = mouseX - dragOffset.x;
+    eq.y = mouseY - dragOffset.y;
+    
+    // 境界制限：回転を考慮した外接矩形で制限
+    if (eq.rotation && (eq.rotation % 360) !== 0) {
+      const radian = (eq.rotation * Math.PI) / 180;
+      const cos = Math.abs(Math.cos(radian));
+      const sin = Math.abs(Math.sin(radian));
+      const maxW = Math.max(eq.top, eq.bottom);
+      const bboxWidth = maxW * cos + eq.height * sin;
+      const bboxHeight = maxW * sin + eq.height * cos;
+      
+      // 回転中心位置を計算
+      const centerX = eq.x + cx;
+      const centerY = eq.y + cy;
+      
+      // 境界内に収める
+      const limitedCenterX = Math.max(bboxWidth / 2, Math.min(centerX, targetTruckBed.width - bboxWidth / 2));
+      const limitedCenterY = Math.max(bboxHeight / 2, Math.min(centerY, targetTruckBed.height - bboxHeight / 2));
+      
+      eq.x = limitedCenterX - cx;
+      eq.y = limitedCenterY - cy;
+    } else {
+      // 回転していない場合の境界制限
+      const diff = (eq.bottom - eq.top) / 2;
+      eq.x = Math.max(-diff, Math.min(eq.x, targetTruckBed.width - eq.bottom + diff));
+      eq.y = Math.max(0, Math.min(eq.y, targetTruckBed.height - eq.height));
+    }
   } else {
     // 長方形
     const rad = ((eq.rotation || 0) * Math.PI) / 180;
@@ -1090,8 +976,6 @@ function onPlacedMouseMove(e: MouseEvent) {
 function onPlacedMouseUp() {
   draggingIndex.value = null
   draggingTruck.value = null
-  ghostEquipment.value = null
-  ghostOpacity.value = 1
   
   // ドラッグ終了時にテキスト選択を元に戻す
   document.body.style.userSelect = ''
