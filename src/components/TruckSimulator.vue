@@ -13,7 +13,7 @@
     <v-main>
       <v-container fluid>
         <v-row>
-          <v-col cols="8" class="text-center">
+          <v-col cols="7" class="text-center">
             <v-row>
               <v-col cols="5">
                 <v-select
@@ -59,8 +59,7 @@
                     <!-- 1台目の荷台 -->
                     <div class="flex-grow-1">
                       <div v-if="selectedTruckBedObj" class="d-flex flex-column align-center">
-                        <div class="mb-2 text-subtitle-2 text-primary">荷台1</div>
-                        <div id="truck-bed-area" class="d-flex ga-8">
+                        <div id="truck-bed-area" class="d-flex ga-4">
                           <div id="truck-bed-svg-area">
                             <svg
                               :width="selectedTruckBedObj.width"
@@ -107,9 +106,9 @@
                               </g>
                             </svg>
                           </div>
-                          <div id="truck-bed-text-area" class="d-flex flex-column ga-2 justify-end align-start pa-4 text-caption">
-                            <div style="font-weight:bold;">荷台1</div>
-                            <div>{{ selectedTruckBedObj.label }}</div>
+                          <div id="truck-bed-text-area" class="d-flex flex-column ga-2 justify-end align-start text-caption">
+                            <div style="font-weight:bold;">車</div>
+                            <div class="text-left">{{ selectedTruckBedObj.label }}</div>
                             <hr />
                             <div style="font-weight:bold;">選択機器</div>
                             <div v-if="placedEquipments.length === 0" style="color:#aaa;">なし</div>
@@ -134,8 +133,7 @@
                     <!-- 2台目の荷台 -->
                     <div class="flex-grow-1">
                       <div v-if="selectedTruckBedObj2" class="d-flex flex-column align-center">
-                        <div class="mb-2 text-subtitle-2 text-secondary">荷台2</div>
-                        <div id="truck-bed-area-2" class="d-flex ga-8">
+                        <div id="truck-bed-area-2" class="d-flex ga-4">
                           <div id="truck-bed-svg-area-2">
                             <svg
                               :width="selectedTruckBedObj2.width"
@@ -182,9 +180,9 @@
                               </g>
                             </svg>
                           </div>
-                          <div class="d-flex flex-column ga-2 justify-end align-start pa-4 text-caption">
-                            <div style="font-weight:bold;">荷台2</div>
-                            <div>{{ selectedTruckBedObj2.label }}</div>
+                          <div id="truck-bed-text-area-2" class="d-flex flex-column ga-2 justify-end align-start text-caption">
+                            <div style="font-weight:bold;">車</div>
+                            <div class="text-left">{{ selectedTruckBedObj2.label }}</div>
                             <hr />
                             <div style="font-weight:bold;">選択機器</div>
                             <div v-if="placedEquipments2.length === 0" style="color:#aaa;">なし</div>
@@ -230,7 +228,7 @@
               </v-col>
             </v-row>
           </v-col>
-          <v-col cols="4" class="text-center pr-6">
+          <v-col cols="5" class="text-center pr-6">
             <p class="text-caption mb-2">
               機材をダブルクリックで荷台に追加できます
             </p>
@@ -258,7 +256,7 @@
                     class="mr-1"
                     @click="categoryListDialog = true"
                   >
-                    カテゴリ覧
+                    カテゴリ一覧
                   </v-btn>
                   <v-btn
                     color="primary"
@@ -1565,9 +1563,16 @@ const onLoadPlacement = async () => {
     background-color: #f9f9f9;
   }
 
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
   @media print {
     body * {
       visibility: hidden !important;
+      margin: 0;
+      padding: 0;
     }
     #print-area, #print-area * {
       visibility: visible !important;
@@ -1582,7 +1587,7 @@ const onLoadPlacement = async () => {
       left: 0;
       top: 0;
       
-      width: 100% !important;
+      width: 80% !important;
       height: 100% !important;
       background: white !important;
       box-shadow: none !important;
@@ -1599,8 +1604,9 @@ const onLoadPlacement = async () => {
       width: 10cm !important;
       height: auto !important;
     }
-    #truck-bed-text-area {
-      font-size: 16pt !important;
+    #truck-bed-text-area, #truck-bed-text-area-2 {
+      width: 5cm !important;
+      font-size: 12pt !important;
     }
   }
 </style>
