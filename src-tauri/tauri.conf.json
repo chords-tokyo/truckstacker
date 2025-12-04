@@ -51,7 +51,12 @@
       "icons/web-app-manifest-512x512.png",
       "icons/apple-touch-icon.png",
       "icons/favicon.ico"
-    ]
+    ],
+    "macOS": {
+      "signingIdentity": "Developer ID Application: YASUO SUZUKI (4X5Z32W694)",
+      "hardenedRuntime": true,
+      "entitlements": "entitlements.plist"
+    }
   },
   "plugins": {
     "fs": {
