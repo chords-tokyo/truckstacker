@@ -13,9 +13,7 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            args: "--mac"
           - os: windows-latest
-            args: "--win"
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
@@ -31,6 +29,18 @@ jobs:
 
       - name: Install deps
         run: npm ci
+      
+      - name: Check notarize env (safe)
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        run: |
+          test -n "$APPLE_ID" && echo "APPLE_ID: set" || (echo "APPLE_ID: MISSING" && exit 1)
+          test -n "$APPLE_TEAM_ID" && echo "APPLE_TEAM_ID: set" || (echo "APPLE_TEAM_ID: MISSING" && exit 1)
+          test -n "$APPLE_APP_SPECIFIC_PASSWORD" && echo "APPLE_APP_SPECIFIC_PASSWORD: set" || (echo "APPLE_APP_SPECIFIC_PASSWORD: MISSING" && exit 1)
 
       # ---------------- macOS: p12 をファイル化 ----------------
       - name: Prepare macOS signing certificate
@@ -38,22 +48,28 @@ jobs:
         shell: bash
         run: |
           echo "${{ secrets.APPLE_CERT_P12 }}" | base64 --decode > certificate.p12
+          ls -la certificate.p12
 
       # ---------------- macOS: build + codesign + notarize ----------------
-      - name: Build Electron (macOS universal, signed & notarized)
+      - name: Build (macOS, signed & notarized)
         if: matrix.os == 'macos-latest'
         env:
-          # codesign (Developer ID Application)
           CSC_LINK: ./certificate.p12
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PWD }}
 
-          # notarization (Apple ID + App-specific password)
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder -c electron-builder.json5 ${{ matrix.args }}
+        run: npm run build
+
+      # ---------------- Windows: build ----------------
+      - name: Build (Windows)
+        if: matrix.os == 'windows-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build
 
       # ---------------- macOS: notarization/staple 検証 ----------------
       - name: Verify notarization (macOS)
@@ -61,36 +77,24 @@ jobs:
         shell: bash
         run: |
           echo "== outputs =="
-          find dist -maxdepth 4 -type f \( -name "*.dmg" -o -name "*.zip" \) -print || true
           find release -maxdepth 6 -type f \( -name "*.dmg" -o -name "*.zip" \) -print || true
 
           DMG="$(find release -maxdepth 6 -type f -name "*-Mac-*-Installer.dmg" | head -n 1)"
-          ZIP="$(find release -maxdepth 6 -type f -name "*-Mac-*-Installer.zip" | head -n 1)"
-
           echo "DMG=$DMG"
-          echo "ZIP=$ZIP"
 
-          if [ -n "$DMG" ]; then
-            echo "== validate dmg =="
-            xcrun stapler validate "$DMG"
-            spctl -a -vvv --type open "$DMG"
-          else
+          if [ -z "$DMG" ]; then
             echo "DMG not found in release/. Check directories.output / artifactName."
             exit 1
           fi
 
-          if [ -n "$ZIP" ]; then
-            echo "== validate zip (stapler may be N/A depending on how notarized) =="
-            # zip は stapler validate が意味を持たない場合があるので、存在確認だけ
-            ls -la "$ZIP"
-          fi
+          xcrun stapler validate "$DMG"
+          spctl -a -vvv --type open "$DMG"
 
-      # ---------------- Windows: build ----------------
-      - name: Build Electron (Windows)
-        if: matrix.os == 'windows-latest'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder -c electron-builder.json5 ${{ matrix.args }}
+      # ---------------- p12 を消す（念のため） ----------------
+      - name: Cleanup certificate
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: rm -f certificate.p12
 
       # ---------------- Release 添付（Draft） ----------------
       - name: Upload artifacts to GitHub Release (draft)
