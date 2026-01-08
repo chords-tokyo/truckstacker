@@ -1,27 +1,18 @@
+# Vue 3 + TypeScript + Vite
 
-# TruckStacker
+This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
 
-Tauri + Vue 3 + Vite製のデスクトップアプリです。
+## Recommended IDE Setup
 
-## 概要
-- トラック荷台（長方形）と音響機器（SVG多角形）を管理・配置するシミュレーター
-- 荷台・機器の登録/削除、SVGドラッグ＆ドロップ、回転・複製機能
+- [VS Code](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur) + [TypeScript Vue Plugin (Volar)](https://marketplace.visualstudio.com/items?itemName=Vue.vscode-typescript-vue-plugin).
 
-## セットアップ
-```
-npm install
-npx tauri dev
-```
+## Type Support For `.vue` Imports in TS
 
-## 主な機能
-- 荷台の登録・削除・選択
-- 音響機器の登録・削除・複製・回転・配置（SVG）
-- データはローカルJSONで管理
+TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [TypeScript Vue Plugin (Volar)](https://marketplace.visualstudio.com/items?itemName=Vue.vscode-typescript-vue-plugin) to make the TypeScript language service aware of `.vue` types.
 
-## 開発
-- `src/` 以下にVueコンポーネントを配置
-- Tauriバックエンドは`src-tauri/`に配置
+If the standalone TypeScript plugin doesn't feel fast enough to you, Volar has also implemented a [Take Over Mode](https://github.com/johnsoncodehk/volar/discussions/471#discussioncomment-1361669) that is more performant. You can enable it by the following steps:
 
----
-
-今後、UIや機能の詳細を追加予定です。
+1. Disable the built-in TypeScript Extension
+   1. Run `Extensions: Show Built-in Extensions` from VSCode's command palette
+   2. Find `TypeScript and JavaScript Language Features`, right click and select `Disable (Workspace)`
+2. Reload the VSCode window by running `Developer: Reload Window` from the command palette.

@@ -1,10 +1,10 @@
-name: publish
+name: publish-electron
 
 on:
   workflow_dispatch:
   push:
     tags:
-      - 'v*'     # v0.1.0 などのタグで実行
+      - "v*"
 
 jobs:
   build:
@@ -13,9 +13,9 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            args: '--target universal-apple-darwin'
+            args: "--mac"
           - os: windows-latest
-            args: ''
+            args: "--win"
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
@@ -27,57 +27,79 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'  # pnpm の場合は 'pnpm'
+          cache: npm
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target'
-
-      - name: Install deps (frontend)
+      - name: Install deps
         run: npm ci
 
-      # ---------------- macOS: 署名 + 公証 + Release upload ----------------
-      - name: Build & Release Tauri (macOS, signed & notarized)
+      # ---------------- macOS: p12 をファイル化 ----------------
+      - name: Prepare macOS signing certificate
         if: matrix.os == 'macos-latest'
-        uses: tauri-apps/tauri-action@v0
+        shell: bash
+        run: |
+          echo "${{ secrets.APPLE_CERT_P12 }}" | base64 --decode > certificate.p12
+
+      # ---------------- macOS: build + codesign + notarize ----------------
+      - name: Build Electron (macOS universal, signed & notarized)
+        if: matrix.os == 'macos-latest'
         env:
-          GITHUB_TOKEN:              ${{ secrets.GITHUB_TOKEN }}
+          # codesign (Developer ID Application)
+          CSC_LINK: ./certificate.p12
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PWD }}
 
-          # 署名用証明書（.p12 を base64 したもの＆そのパスワード）
-          APPLE_CERTIFICATE:         ${{ secrets.APPLE_CERT_P12 }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERT_PWD }}
+          # notarization (Apple ID + App-specific password)
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
-          # Signing Identity（TEAM ID だけでOK）
-          APPLE_SIGNING_IDENTITY:    ${{ secrets.APPLE_TEAM_ID }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder -c electron-builder.json5 ${{ matrix.args }}
 
-          # 公証用 Apple ID 認証
-          APPLE_ID:                  ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD:            ${{ secrets.APPLE_PASSWORD }}  # App用パスワード
-          APPLE_TEAM_ID:             ${{ secrets.APPLE_TEAM_ID }}
-        with:
-          args: ${{ matrix.args }}
-          tagName: ${{ github.ref_name }}
-          releaseName: "TruckStacker ${{ github.ref_name }}"
-          releaseBody: "Auto-built (signed & notarized) for macOS."
-          releaseDraft: true
-          prerelease: false
+      # ---------------- macOS: notarization/staple 検証 ----------------
+      - name: Verify notarization (macOS)
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          echo "== outputs =="
+          find dist -maxdepth 4 -type f \( -name "*.dmg" -o -name "*.zip" \) -print || true
+          find release -maxdepth 6 -type f \( -name "*.dmg" -o -name "*.zip" \) -print || true
 
-      # ---------------- Windows: 従来どおりビルド + Release upload ---------
-      - name: Build & Release Tauri (Windows)
+          DMG="$(find release -maxdepth 6 -type f -name "*-Mac-*-Installer.dmg" | head -n 1)"
+          ZIP="$(find release -maxdepth 6 -type f -name "*-Mac-*-Installer.zip" | head -n 1)"
+
+          echo "DMG=$DMG"
+          echo "ZIP=$ZIP"
+
+          if [ -n "$DMG" ]; then
+            echo "== validate dmg =="
+            xcrun stapler validate "$DMG"
+            spctl -a -vvv --type open "$DMG"
+          else
+            echo "DMG not found in release/. Check directories.output / artifactName."
+            exit 1
+          fi
+
+          if [ -n "$ZIP" ]; then
+            echo "== validate zip (stapler may be N/A depending on how notarized) =="
+            # zip は stapler validate が意味を持たない場合があるので、存在確認だけ
+            ls -la "$ZIP"
+          fi
+
+      # ---------------- Windows: build ----------------
+      - name: Build Electron (Windows)
         if: matrix.os == 'windows-latest'
-        uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder -c electron-builder.json5 ${{ matrix.args }}
+
+      # ---------------- Release 添付（Draft） ----------------
+      - name: Upload artifacts to GitHub Release (draft)
+        uses: softprops/action-gh-release@v2
         with:
-          args: ${{ matrix.args }}
-          tagName: ${{ github.ref_name }}
-          releaseName: "TruckStacker ${{ github.ref_name }} (Windows)"
-          releaseBody: "Auto-built for Windows."
-          releaseDraft: true
+          tag_name: ${{ github.ref_name }}
+          name: "truckstacker ${{ github.ref_name }}"
+          body: "Auto-built for macOS (universal, signed & notarized) and Windows."
+          draft: true
           prerelease: false
+          files: |
+            release/**/*
