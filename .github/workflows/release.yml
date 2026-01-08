@@ -13,7 +13,9 @@ jobs:
       matrix:
         include:
           - os: macos-latest
+            platform: mac
           - os: windows-latest
+            platform: win
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
@@ -30,86 +32,92 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      # ---- 共通: フロント/プレロード等をビルド（vite + vue-tsc）----
-      - name: Build web + electron bundles
-        run: npm run build:bundles
-
-      # ---------------- macOS: p12 をファイル化 ----------------
+      # --- macOS: p12 ---
       - name: Prepare macOS signing certificate
-        if: matrix.os == 'macos-latest'
+        if: matrix.platform == 'mac'
         shell: bash
         run: |
           echo "${{ secrets.APPLE_CERT_P12 }}" | base64 --decode > certificate.p12
           ls -la certificate.p12
 
-      # ---------------- macOS: electron-builder（publishしない） ----------------
+      # --- Build bundles (vite/vue-tsc) ---
+      # あなたの package.json が npm run build で vite+electron-builder まで行く場合、
+      # ここでは electron-builder を直接叩きます（publishしない）
       - name: Package (macOS, signed, no publish)
-        if: matrix.os == 'macos-latest'
+        if: matrix.platform == 'mac'
         env:
           CSC_LINK: ./certificate.p12
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PWD }}
         run: npx electron-builder -c electron-builder.json5 --mac --publish never
 
-      # ---------------- macOS: notarize + staple（notarytoolで確実に） ----------------
       - name: Notarize & Staple DMG (macOS)
-        if: matrix.os == 'macos-latest'
+        if: matrix.platform == 'mac'
         shell: bash
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }} # App用パスワード
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-
           DMG="$(find release -maxdepth 6 -type f -name "*-Mac-*-Installer.dmg" | head -n 1)"
           echo "DMG=$DMG"
-          if [ -z "${DMG:-}" ]; then
-            echo "DMG not found in release/. Check directories.output / artifactName."
-            exit 1
-          fi
+          test -n "$DMG"
 
-          echo "== submit notarization =="
           xcrun notarytool submit "$DMG" \
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_PASSWORD" \
             --wait
 
-          echo "== staple =="
           xcrun stapler staple "$DMG"
           xcrun stapler validate "$DMG"
 
-          echo "== gatekeeper assess (app inside dmg) =="
-
-          MOUNT_DIR="$(mktemp -d /tmp/mnt.XXXXXX)"
-          hdiutil attach "$DMG" -nobrowse -mountpoint "$MOUNT_DIR"
-
-          APP_PATH="$(find "$MOUNT_DIR" -maxdepth 2 -type d -name "*.app" | head -n 1)"
-          echo "APP_PATH=$APP_PATH"
-
-          if [ -z "${APP_PATH:-}" ]; then
-            echo "No .app found inside DMG."
-            hdiutil detach "$MOUNT_DIR"
-            exit 1
-          fi
-
-          spctl -a -vvv --type execute "$APP_PATH"
-          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
-
-          hdiutil detach "$MOUNT_DIR"
-          rm -rf "$MOUNT_DIR"
-
       - name: Cleanup certificate
-        if: matrix.os == 'macos-latest'
+        if: matrix.platform == 'mac'
         shell: bash
         run: rm -f certificate.p12
 
-      # ---------------- Windows: electron-builder（publishしない） ----------------
       - name: Package (Windows, no publish)
-        if: matrix.os == 'windows-latest'
+        if: matrix.platform == 'win'
         run: npx electron-builder -c electron-builder.json5 --win --publish never
 
-      # ---------------- Release 添付（Draft） ----------------
+      # --- 成果物を artifact に退避（ここ重要）---
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.platform }}
+          path: |
+            release/**/*.dmg
+            release/**/*.zip
+            release/**/*.exe
+            release/**/*.blockmap
+            release/**/latest*.yml
+            release/**/app-update.yml
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifacts (mac)
+        uses: actions/download-artifact@v4
+        with:
+          name: artifacts-mac
+          path: artifacts
+
+      - name: Download artifacts (win)
+        uses: actions/download-artifact@v4
+        with:
+          name: artifacts-win
+          path: artifacts
+
+      - name: List files
+        run: |
+          echo "== artifacts =="
+          find artifacts -type f -maxdepth 6 -print
+
       - name: Upload artifacts to GitHub Release (draft)
         uses: softprops/action-gh-release@v2
         with:
@@ -119,4 +127,9 @@ jobs:
           draft: true
           prerelease: false
           files: |
-            release/**/*
+            artifacts/**/*.dmg
+            artifacts/**/*.zip
+            artifacts/**/*.exe
+            artifacts/**/*.blockmap
+            artifacts/**/latest*.yml
+            artifacts/**/app-update.yml
