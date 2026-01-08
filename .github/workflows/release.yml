@@ -76,8 +76,28 @@ jobs:
           xcrun stapler staple "$DMG"
           xcrun stapler validate "$DMG"
 
-          echo "== gatekeeper assess =="
-          spctl -a -vvv --type open "$DMG"
+          echo "== gatekeeper assess (app inside dmg) =="
+
+          # mount dmg
+          MOUNT_DIR="$(mktemp -d /tmp/mnt.XXXXXX)"
+          hdiutil attach "$DMG" -nobrowse -mountpoint "$MOUNT_DIR"
+
+          APP_PATH="$(find "$MOUNT_DIR" -maxdepth 2 -type d -name "*.app" | head -n 1)"
+          echo "APP_PATH=$APP_PATH"
+
+          if [ -z "${APP_PATH:-}" ]; then
+            echo "No .app found inside DMG."
+            hdiutil detach "$MOUNT_DIR"
+            exit 1
+          fi
+
+          # assess the app (this is the important check)
+          spctl -a -vvv --type execute "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+          # unmount
+          hdiutil detach "$MOUNT_DIR"
+          rm -rf "$MOUNT_DIR"
 
       - name: Cleanup certificate
         if: matrix.os == 'macos-latest'
