@@ -29,18 +29,6 @@ jobs:
 
       - name: Install deps
         run: npm ci
-      
-      - name: Check notarize env (safe)
-        if: matrix.os == 'macos-latest'
-        shell: bash
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-        run: |
-          test -n "$APPLE_ID" && echo "APPLE_ID: set" || (echo "APPLE_ID: MISSING" && exit 1)
-          test -n "$APPLE_TEAM_ID" && echo "APPLE_TEAM_ID: set" || (echo "APPLE_TEAM_ID: MISSING" && exit 1)
-          test -n "$APPLE_APP_SPECIFIC_PASSWORD" && echo "APPLE_APP_SPECIFIC_PASSWORD: set" || (echo "APPLE_APP_SPECIFIC_PASSWORD: MISSING" && exit 1)
 
       # ---------------- macOS: p12 をファイル化 ----------------
       - name: Prepare macOS signing certificate
@@ -50,22 +38,51 @@ jobs:
           echo "${{ secrets.APPLE_CERT_P12 }}" | base64 --decode > certificate.p12
           ls -la certificate.p12
 
-      # ---------------- macOS: build + codesign + notarize ----------------
-      - name: Build (macOS, signed & notarized)
+      # ---------------- macOS: build + codesign（notarizeはここではしない） ----------------
+      - name: Build (macOS, signed)
         if: matrix.os == 'macos-latest'
         env:
           CSC_LINK: ./certificate.p12
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PWD }}
-
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-
-          # 念のため両方セット（環境変数名の取り違え対策）
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run build
+
+      # ---------------- macOS: notarize + staple（notarytoolで確実に） ----------------
+      - name: Notarize & Staple DMG (macOS)
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }} # App用パスワード
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+
+          DMG="$(find release -maxdepth 6 -type f -name "*-Mac-*-Installer.dmg" | head -n 1)"
+          echo "DMG=$DMG"
+          if [ -z "${DMG:-}" ]; then
+            echo "DMG not found in release/. Check directories.output / artifactName."
+            exit 1
+          fi
+
+          echo "== submit notarization =="
+          xcrun notarytool submit "$DMG" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_PASSWORD" \
+            --wait
+
+          echo "== staple =="
+          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
+
+          echo "== gatekeeper assess =="
+          spctl -a -vvv --type open "$DMG"
+
+      - name: Cleanup certificate
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: rm -f certificate.p12
 
       # ---------------- Windows: build ----------------
       - name: Build (Windows)
@@ -73,31 +90,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run build
-
-      # ---------------- macOS: notarization/staple 検証 ----------------
-      - name: Verify notarization (macOS)
-        if: matrix.os == 'macos-latest'
-        shell: bash
-        run: |
-          echo "== outputs =="
-          find release -maxdepth 6 -type f \( -name "*.dmg" -o -name "*.zip" \) -print || true
-
-          DMG="$(find release -maxdepth 6 -type f -name "*-Mac-*-Installer.dmg" | head -n 1)"
-          echo "DMG=$DMG"
-
-          if [ -z "$DMG" ]; then
-            echo "DMG not found in release/. Check directories.output / artifactName."
-            exit 1
-          fi
-
-          xcrun stapler validate "$DMG"
-          spctl -a -vvv --type open "$DMG"
-
-      # ---------------- p12 を消す（念のため） ----------------
-      - name: Cleanup certificate
-        if: matrix.os == 'macos-latest'
-        shell: bash
-        run: rm -f certificate.p12
 
       # ---------------- Release 添付（Draft） ----------------
       - name: Upload artifacts to GitHub Release (draft)
