@@ -61,6 +61,9 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
+          # 念のため両方セット（環境変数名の取り違え対策）
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run build
 
