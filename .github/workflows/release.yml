@@ -30,6 +30,10 @@ jobs:
       - name: Install deps
         run: npm ci
 
+      # ---- 共通: フロント/プレロード等をビルド（vite + vue-tsc）----
+      - name: Build web + electron bundles
+        run: npm run build:bundles
+
       # ---------------- macOS: p12 をファイル化 ----------------
       - name: Prepare macOS signing certificate
         if: matrix.os == 'macos-latest'
@@ -38,14 +42,13 @@ jobs:
           echo "${{ secrets.APPLE_CERT_P12 }}" | base64 --decode > certificate.p12
           ls -la certificate.p12
 
-      # ---------------- macOS: build + codesign（notarizeはここではしない） ----------------
-      - name: Build (macOS, signed)
+      # ---------------- macOS: electron-builder（publishしない） ----------------
+      - name: Package (macOS, signed, no publish)
         if: matrix.os == 'macos-latest'
         env:
           CSC_LINK: ./certificate.p12
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PWD }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run build
+        run: npx electron-builder -c electron-builder.json5 --mac --publish never
 
       # ---------------- macOS: notarize + staple（notarytoolで確実に） ----------------
       - name: Notarize & Staple DMG (macOS)
@@ -78,7 +81,6 @@ jobs:
 
           echo "== gatekeeper assess (app inside dmg) =="
 
-          # mount dmg
           MOUNT_DIR="$(mktemp -d /tmp/mnt.XXXXXX)"
           hdiutil attach "$DMG" -nobrowse -mountpoint "$MOUNT_DIR"
 
@@ -91,11 +93,9 @@ jobs:
             exit 1
           fi
 
-          # assess the app (this is the important check)
           spctl -a -vvv --type execute "$APP_PATH"
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
-          # unmount
           hdiutil detach "$MOUNT_DIR"
           rm -rf "$MOUNT_DIR"
 
@@ -104,12 +104,10 @@ jobs:
         shell: bash
         run: rm -f certificate.p12
 
-      # ---------------- Windows: build ----------------
-      - name: Build (Windows)
+      # ---------------- Windows: electron-builder（publishしない） ----------------
+      - name: Package (Windows, no publish)
         if: matrix.os == 'windows-latest'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run build
+        run: npx electron-builder -c electron-builder.json5 --win --publish never
 
       # ---------------- Release 添付（Draft） ----------------
       - name: Upload artifacts to GitHub Release (draft)
