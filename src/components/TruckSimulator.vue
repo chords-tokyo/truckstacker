@@ -1,9 +1,8 @@
 <template>
   <v-app>
     <v-app-bar :elevation="2" class="bg-primary">
-      <v-app-bar-title>
-        <img src="/src/assets/logo.svg" alt="TruckStacker" style="height:32px;vertical-align:middle;margin-right:8px;" />
-      </v-app-bar-title>
+      <img src="/src/assets/logo.svg" alt="TruckStacker" style="height:32px;vertical-align:middle;margin-left:16px;" />
+      <v-spacer></v-spacer>
       <template v-slot:append>
         <v-btn @click="onLoadPlacement">配置を読込</v-btn>
         <v-btn @click="onSavePlacement">配置を保存</v-btn>
@@ -240,27 +239,33 @@
                   v-model="equipmentTab"
                   align-tabs="center"
                   color="primary"
+                  density="compact"
                 >
                   <v-tab
                     v-for="value in equipmentCategories"
                     :key="value.id"
                     :value="value.id"
+                    density="compact"
+                    size="small"
+                    :slim="true"
+                    class="px-0 text-no-wrap"
                   >
                     {{ value.name }}
                   </v-tab>
                 </v-tabs>
-                <div>
+                <div class="text-no-wrap">
                   <v-btn
                     color="secondary"
                     size="small"
-                    class="mr-1"
+                    class="mr-1 px-2"
                     @click="categoryListDialog = true"
                   >
-                    カテゴリ一覧
+                    カテゴリー
                   </v-btn>
                   <v-btn
                     color="primary"
                     size="small"
+                    class="px-2"
                     @click="openAddEquipmentDialog"
                   >
                     機材追加
@@ -502,16 +507,16 @@ import ConfirmDialog from './dialogs/ConfirmDialog.vue'
 import DeleteDialog from './dialogs/DeleteDialog.vue'
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { VBtn } from 'vuetify/components'
-// TauriファイルAPI
-import { readTextFile, writeTextFile, BaseDirectory } from '@tauri-apps/plugin-fs'
-import { open, save } from '@tauri-apps/plugin-dialog'
-import { listen } from '@tauri-apps/api/event'
 // 型定義のインポート
 import type { TruckBed, EquipmentCategory, Equipment, PlacedEquipment } from '../types'
+import type { ElectronAPI } from '../types/electron'
 
 // デフォルトデータのインポート
 import defaultTruckBeds from '../assets/default-data/truck_beds.json'
 import defaultEquipments from '../assets/default-data/equipments.json'
+
+// Electron APIアクセス
+const electronAPI: ElectronAPI = window.electronAPI
 
 // クリア確認ダイアログ用
 const clearDialog = ref(false)
@@ -543,63 +548,75 @@ const equipmentCategories = ref<EquipmentCategory[]>([
 
 const equipments = ref<Equipment[]>([])
 
-const TRUCK_BEDS_FILE = 'truck_beds.json'
-const EQUIPMENTS_FILE = 'equipments.json'
+const TRUCK_BEDS_KEY = 'truck_beds'
+const EQUIPMENTS_KEY = 'equipments'
 
-// equipmentsをファイルから読み込む
-async function loadEquipments() {
+// equipmentsをローカルストレージから読み込む
+function loadEquipments() {
   try {
-    const data = await readTextFile(EQUIPMENTS_FILE, { baseDir: BaseDirectory.AppData })
-    equipments.value = JSON.parse(data)
+    const data = localStorage.getItem(EQUIPMENTS_KEY)
+    if (data) {
+      equipments.value = JSON.parse(data)
+    } else {
+      // データがない場合、デフォルトデータを使用
+      equipments.value = defaultEquipments
+      saveEquipments()
+    }
   } catch (error) {
-    // ファイルが存在しない場合、デフォルトデータを使用
+    console.error('機器データの読込失敗', error)
     equipments.value = defaultEquipments
-    await saveEquipments()
+    saveEquipments()
   }
 }
 
-// 荷台をファイルから読み込む
-async function loadTruckBeds() {
+// 荷台をローカルストレージから読み込む
+function loadTruckBeds() {
   try {
-    const data = await readTextFile(TRUCK_BEDS_FILE, { baseDir: BaseDirectory.AppData })
-    truckBeds.value = JSON.parse(data)
+    const data = localStorage.getItem(TRUCK_BEDS_KEY)
+    if (data) {
+      truckBeds.value = JSON.parse(data)
+    } else {
+      // データがない場合、デフォルトデータを使用
+      truckBeds.value = defaultTruckBeds
+      saveTruckBeds()
+    }
   } catch (error) {
-    // ファイルが存在しない場合、デフォルトデータを使用
+    console.error('荷台データの読込失敗', error)
     truckBeds.value = defaultTruckBeds
-    await saveTruckBeds()
+    saveTruckBeds()
   }
 }
 
-// truckBedsをファイルに保存
-async function saveTruckBeds() {
+// truckBedsをローカルストレージに保存
+function saveTruckBeds() {
   try {
-    await writeTextFile(TRUCK_BEDS_FILE, JSON.stringify(truckBeds.value), { baseDir: BaseDirectory.AppData })
+    localStorage.setItem(TRUCK_BEDS_KEY, JSON.stringify(truckBeds.value))
   } catch (e) {
-    alert('荷台データの保存失敗: ' + e);
+    alert('荷台データの保存失敗: ' + e)
     console.error('荷台データの保存失敗', e)
   }
 }
 
-// equipmentsをファイルに保存
-async function saveEquipments() {
+// equipmentsをローカルストレージに保存
+function saveEquipments() {
   try {
-    await writeTextFile(EQUIPMENTS_FILE, JSON.stringify(equipments.value), { baseDir: BaseDirectory.AppData })
+    localStorage.setItem(EQUIPMENTS_KEY, JSON.stringify(equipments.value))
   } catch (e) {
-    alert('機器データの保存失敗: ' + e);
+    alert('機器データの保存失敗: ' + e)
     console.error('機器データの保存失敗', e)
   }
 }
 
 // メニューイベントの処理
 async function handleExportData() {
-  console.log('📤 エクスポート処理開始');
+  console.log('📤 エクスポート処理開始')
   try {
-    const filePath = await save({
+    const result = await electronAPI.showSaveDialog({
       title: 'データをエクスポート',
       filters: [{ name: 'JSON', extensions: ['json'] }],
       defaultPath: 'truckstacker-data.json',
-    });
-    if (!filePath) return;
+    })
+    if (result.canceled || !result.filePath) return
 
     const exportData = {
       version: '1.0',
@@ -607,96 +624,97 @@ async function handleExportData() {
       equipments: equipments.value,
       categories: equipmentCategories.value,
       exportDate: new Date().toISOString(),
-    };
+    }
 
-    await writeTextFile(filePath, JSON.stringify(exportData, null, 2));
-    alert('データをエクスポートしました: ' + filePath);
+    const writeResult = await electronAPI.writeFile(result.filePath, JSON.stringify(exportData, null, 2))
+    if (writeResult.success) {
+      alert('データをエクスポートしました: ' + result.filePath)
+    } else {
+      alert('エクスポートに失敗しました: ' + writeResult.error)
+    }
   } catch (e) {
-    alert('エクスポートに失敗しました: ' + e);
+    alert('エクスポートに失敗しました: ' + e)
   }
 }
 
 async function handleImportData() {
-  console.log('📥 インポート処理開始');
+  console.log('📥 インポート処理開始')
   try {
-    const filePath = await open({
+    const result = await electronAPI.showOpenDialog({
       title: 'データをインポート',
       filters: [{ name: 'JSON', extensions: ['json'] }],
-      multiple: false,
-    });
-    if (!filePath) return;
+      properties: ['openFile'],
+    })
+    if (result.canceled || result.filePaths.length === 0) return
 
-    const path = Array.isArray(filePath) ? filePath[0] : filePath;
-    if (!path) return;
+    const filePath = result.filePaths[0]
+    const readResult = await electronAPI.readFile(filePath)
+    
+    if (!readResult.success || !readResult.data) {
+      alert('ファイルの読み込みに失敗しました: ' + readResult.error)
+      return
+    }
 
-    const text = await readTextFile(path);
-    const importData = JSON.parse(text);
+    const importData = JSON.parse(readResult.data)
 
     // データの検証と適用
     if (importData.truckBeds && Array.isArray(importData.truckBeds)) {
-      truckBeds.value = importData.truckBeds;
-      await saveTruckBeds();
+      truckBeds.value = importData.truckBeds
+      saveTruckBeds()
     }
     if (importData.equipments && Array.isArray(importData.equipments)) {
-      equipments.value = importData.equipments;
-      await saveEquipments();
+      equipments.value = importData.equipments
+      saveEquipments()
     }
     if (importData.categories && Array.isArray(importData.categories)) {
-      equipmentCategories.value = importData.categories;
+      equipmentCategories.value = importData.categories
     }
 
-    alert('データをインポートしました');
+    alert('データをインポートしました')
   } catch (e) {
-    alert('インポートに失敗しました: ' + e);
+    alert('インポートに失敗しました: ' + e)
   }
 }
 
-// リスナーのクリーンアップ用
-const unlisteners: Array<() => void> = []
-
 // onMountedで読み込み
-onMounted(async () => {
-  console.log('🚀 コンポーネントマウント開始');
+onMounted(() => {
+  console.log('🚀 コンポーネントマウント開始')
   loadTruckBeds()
   loadEquipments()
   
   // メニューイベントのリスナー登録
-  console.log('🎯 メニューイベントリスナー登録中...');
+  console.log('🎯 メニューイベントリスナー登録中...')
   
   try {
-    const unlistenExport = await listen('menu-export-data', (event: any) => {
-      console.log('🔥 menu-export-data イベント受信:', event);
+    electronAPI.onMenuEvent('menu-export-data', () => {
+      console.log('🔥 menu-export-data イベント受信')
       handleExportData()
     })
-    console.log('📡 Export リスナー登録完了:', unlistenExport);
-    unlisteners.push(unlistenExport)
+    console.log('📡 Export リスナー登録完了')
     
-    const unlistenImport = await listen('menu-import-data', (event: any) => {
-      console.log('🔥 menu-import-data イベント受信:', event);
+    electronAPI.onMenuEvent('menu-import-data', () => {
+      console.log('🔥 menu-import-data イベント受信')
       handleImportData()
     })
-    console.log('📡 Import リスナー登録完了:', unlistenImport);
-    unlisteners.push(unlistenImport)
+    console.log('📡 Import リスナー登録完了')
     
   } catch (error) {
-    console.error('❌ イベントリスナー登録エラー:', error);
+    console.error('❌ イベントリスナー登録エラー:', error)
   }
   
-  console.log('✅ メニューイベントリスナー登録完了');
-  console.log('🎉 コンポーネントマウント完了');
+  console.log('✅ メニューイベントリスナー登録完了')
+  console.log('🎉 コンポーネントマウント完了')
 })
 
 // コンポーネントの破棄時にリスナーをクリーンアップ
 onUnmounted(() => {
-  console.log('🧹 イベントリスナーのクリーンアップ');
-  unlisteners.forEach(unlisten => {
-    try {
-      unlisten()
-    } catch (error) {
-      console.error('リスナークリーンアップエラー:', error)
-    }
-  })
-  unlisteners.length = 0
+  console.log('🧹 イベントリスナーのクリーンアップ')
+  try {
+    electronAPI.removeMenuListener('menu-export-data')
+    electronAPI.removeMenuListener('menu-import-data')
+  } catch (error) {
+    console.error('リスナークリーンアップエラー:', error)
+  }
 })
 
 // 荷台一覧ダイアログ
@@ -1475,67 +1493,83 @@ function printTruckBedArea() {
 // 配置と荷台選択情報をまとめて保存/読込
 const onSavePlacement = async () => {
   try {
-    const filePath = await save({
+    const result = await electronAPI.showSaveDialog({
       title: '配置データの保存',
       filters: [{ name: 'JSON', extensions: ['json'] }],
       defaultPath: 'placement.json',
-    });
-    if (!filePath) {
-      alert('保存をキャンセルしました');
-      return;
+    })
+    if (result.canceled || !result.filePath) {
+      alert('保存をキャンセルしました')
+      return
     }
     // 配置と選択荷台IDをまとめて保存
     const saveObj = {
       selectedTruckBedId: selectedTruckBedId.value,
       placedEquipments: placedEquipments.value,
-    };
-    await writeTextFile(filePath, JSON.stringify(saveObj, null, 2));
-    alert('配置を保存しました: ' + filePath);
-  } catch (e) {
-    let msg = '';
-    if (typeof e === 'object' && e !== null && 'message' in e) {
-      msg = (e as any).message;
-    } else {
-      msg = String(e);
     }
-    alert('保存に失敗しました: ' + msg);
-    console.error('配置保存エラー', e);
+    const writeResult = await electronAPI.writeFile(result.filePath, JSON.stringify(saveObj, null, 2))
+    if (writeResult.success) {
+      alert('配置を保存しました: ' + result.filePath)
+    } else {
+      alert('保存に失敗しました: ' + writeResult.error)
+    }
+  } catch (e) {
+    let msg = ''
+    if (typeof e === 'object' && e !== null && 'message' in e) {
+      msg = (e as any).message
+    } else {
+      msg = String(e)
+    }
+    alert('保存に失敗しました: ' + msg)
+    console.error('配置保存エラー', e)
   }
-};
+}
 
 const onLoadPlacement = async () => {
   try {
-    const filePath = await open({
+    const result = await electronAPI.showOpenDialog({
       title: '配置データの読込',
       filters: [{ name: 'JSON', extensions: ['json'] }],
-      multiple: false,
-    });
-    if (!filePath) return;
-    const path = Array.isArray(filePath) ? filePath[0] : filePath;
-    if (!path) return;
-    const text = await readTextFile(path);
-    const obj = JSON.parse(text);
+      properties: ['openFile'],
+    })
+    if (result.canceled || result.filePaths.length === 0) return
+    
+    const filePath = result.filePaths[0]
+    const readResult = await electronAPI.readFile(filePath)
+    
+    if (!readResult.success || !readResult.data) {
+      alert('ファイルの読み込みに失敗しました: ' + readResult.error)
+      return
+    }
+    
+    const obj = JSON.parse(readResult.data)
     // 旧形式（配列のみ）もサポート
     if (Array.isArray(obj)) {
-      placedEquipments.value = obj;
+      placedEquipments.value = obj
     } else if (typeof obj === 'object' && obj !== null) {
       if (Array.isArray(obj.placedEquipments)) {
-        placedEquipments.value = obj.placedEquipments;
+        placedEquipments.value = obj.placedEquipments
       }
       if ('selectedTruckBedId' in obj) {
-        selectedTruckBedId.value = obj.selectedTruckBedId;
+        selectedTruckBedId.value = obj.selectedTruckBedId
       }
     } else {
-      throw new Error('不正なデータ形式');
+      throw new Error('不正なデータ形式')
     }
-    // alert('配置を読込ました');
+    // alert('配置を読込ました')
   } catch (e) {
-    alert('読込に失敗しました: ' + e);
+    alert('読込に失敗しました: ' + e)
   }
-};
+}
 </script>
 
 <style>
+  /* v-appを画面いっぱいにする */
+  .v-application {
+    width: 100% !important;
+    height: 100vh !important;
+  }
+
   /* ドラッグ中のテキスト選択を防止 */
   * {
     -webkit-user-select: none;
@@ -1564,11 +1598,15 @@ const onLoadPlacement = async () => {
   }
 
   @page {
-    size: A4;
-    margin: 0;
+    size: A4 portrait;
+    margin: 10mm;
   }
 
   @media print {
+    html, body {
+      height: 100% !important;
+      overflow: hidden !important;
+    }
     body * {
       visibility: hidden !important;
       margin: 0;
@@ -1583,30 +1621,69 @@ const onLoadPlacement = async () => {
       visibility: hidden !important;
     }
     #print-area {
-      position: absolute !important;
-      left: 0;
-      top: 0;
-      
-      width: 80% !important;
-      height: 100% !important;
+      position: fixed !important;
+      left: 0 !important;
+      top: 0 !important;
+      width: 100% !important;
+      height: 100vh !important;
+      max-height: 100vh !important;
       background: white !important;
       box-shadow: none !important;
       border: none !important;
       margin: 0 !important;
-      padding: 20px !important;
+      padding: 0 !important;
       z-index: 9999 !important;
+      overflow: hidden !important;
+      page-break-after: auto !important;
+      page-break-inside: avoid !important;
+    }
+    #print-area .v-row {
+      margin: 0 !important;
+      height: 100% !important;
+      page-break-inside: avoid !important;
+    }
+    #print-area .v-col {
+      padding: 2mm !important;
+      max-width: 50% !important;
+      flex: 0 0 50% !important;
+      height: 100% !important;
+      overflow: hidden !important;
     }
     #truck-bed-area, #truck-bed-area-2 {
-      border: none !important;
+      border: 1px solid #ccc !important;
       background-color: white !important;
+      padding: 2mm !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      justify-content: center !important;
+      gap: 2mm !important;
+      height: 100% !important;
+      max-height: 100% !important;
+      overflow: hidden !important;
+      transform: scale(1) !important;
+      transform-origin: center center !important;
+    }
+    #truck-bed-svg-area, #truck-bed-svg-area-2 {
+      max-width: 90mm !important;
+      max-height: 180mm !important;
+      flex-shrink: 1 !important;
     }
     #truck-bed-svg-area svg, #truck-bed-svg-area-2 svg {
-      width: 10cm !important;
+      max-width: 90mm !important;
+      max-height: 180mm !important;
+      width: auto !important;
       height: auto !important;
     }
     #truck-bed-text-area, #truck-bed-text-area-2 {
-      width: 5cm !important;
-      font-size: 12pt !important;
+      width: 90mm !important;
+      font-size: 9pt !important;
+      line-height: 1.2 !important;
+      max-height: 80mm !important;
+      overflow: hidden !important;
+    }
+    #truck-bed-text-area hr, #truck-bed-text-area-2 hr {
+      margin: 1mm 0 !important;
     }
   }
 </style>
