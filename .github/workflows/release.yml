@@ -6,6 +6,7 @@ on:
     tags:
       - "v*"
 
+# Release 作成・アップロードに必要
 permissions:
   contents: write
 
@@ -38,7 +39,7 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      # --- macOS: p12 ---
+      # --- macOS: p12 をファイル化（electron-builder の CSC_LINK に渡す） ---
       - name: Prepare macOS signing certificate
         if: matrix.platform == 'mac'
         shell: bash
@@ -50,13 +51,13 @@ jobs:
       - name: Build & Publish (macOS)
         if: matrix.platform == 'mac'
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
           # codesign
           CSC_LINK: ./certificate.p12
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PWD }}
 
-          # notarize (electron-builder が拾う想定の変数名)
+          # notarize（★変数名が重要）
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
@@ -71,5 +72,5 @@ jobs:
       - name: Build & Publish (Windows)
         if: matrix.platform == 'win'
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run release
