@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build:bundles": "vue-tsc && vite build",
-    "build": "vue-tsc && vite build && electron-builder -c electron-builder.json5",
+    "build": "vue-tsc && vite build && electron-builder -c electron-builder.json5 --publish never",
     "preview": "vite preview"
   },
   "dependencies": {

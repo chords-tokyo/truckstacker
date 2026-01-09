@@ -40,16 +40,16 @@ jobs:
           echo "${{ secrets.APPLE_CERT_P12 }}" | base64 --decode > certificate.p12
           ls -la certificate.p12
 
-      # --- Build bundles (vite/vue-tsc) ---
-      # あなたの package.json が npm run build で vite+electron-builder まで行く場合、
-      # ここでは electron-builder を直接叩きます（publishしない）
-      - name: Package (macOS, signed, no publish)
+      # --- Build (macOS) ---
+      - name: Build (macOS, signed)
         if: matrix.platform == 'mac'
         env:
           CSC_LINK: ./certificate.p12
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PWD }}
-        run: npx electron-builder -c electron-builder.json5 --mac --publish never
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build
 
+      # --- macOS: notarize + staple (DMG) ---
       - name: Notarize & Staple DMG (macOS)
         if: matrix.platform == 'mac'
         shell: bash
@@ -59,29 +59,49 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
+
+          echo "== outputs =="
+          find release -maxdepth 6 -type f \( -name "*.dmg" -o -name "*.zip" \) -print || true
+
           DMG="$(find release -maxdepth 6 -type f -name "*-Mac-*-Installer.dmg" | head -n 1)"
           echo "DMG=$DMG"
           test -n "$DMG"
 
+          echo "== submit notarization =="
           xcrun notarytool submit "$DMG" \
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_PASSWORD" \
             --wait
 
+          echo "== staple & validate =="
           xcrun stapler staple "$DMG"
           xcrun stapler validate "$DMG"
+
+          echo "== gatekeeper assess (app inside dmg) =="
+          MOUNT_DIR="$(mktemp -d /tmp/mnt.XXXXXX)"
+          hdiutil attach "$DMG" -nobrowse -mountpoint "$MOUNT_DIR"
+          APP_PATH="$(find "$MOUNT_DIR" -maxdepth 2 -type d -name "*.app" | head -n 1)"
+          echo "APP_PATH=$APP_PATH"
+          test -n "$APP_PATH"
+          spctl -a -vvv --type execute "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          hdiutil detach "$MOUNT_DIR"
+          rm -rf "$MOUNT_DIR"
 
       - name: Cleanup certificate
         if: matrix.platform == 'mac'
         shell: bash
         run: rm -f certificate.p12
 
-      - name: Package (Windows, no publish)
+      # --- Build (Windows) ---
+      - name: Build (Windows)
         if: matrix.platform == 'win'
-        run: npx electron-builder -c electron-builder.json5 --win --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build
 
-      # --- 成果物を artifact に退避（ここ重要）---
+      # --- 成果物を artifact に退避 ---
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -90,9 +110,8 @@ jobs:
             release/**/*.dmg
             release/**/*.zip
             release/**/*.exe
-            release/**/*.blockmap
-            release/**/latest*.yml
-            release/**/app-update.yml
+            release/**/*.AppImage
+          if-no-files-found: error
 
   release:
     runs-on: ubuntu-latest
@@ -116,7 +135,7 @@ jobs:
       - name: List files
         run: |
           echo "== artifacts =="
-          find artifacts -type f -maxdepth 6 -print
+          find artifacts -type f -maxdepth 8 -print
 
       - name: Upload artifacts to GitHub Release (draft)
         uses: softprops/action-gh-release@v2
@@ -130,6 +149,4 @@ jobs:
             artifacts/**/*.dmg
             artifacts/**/*.zip
             artifacts/**/*.exe
-            artifacts/**/*.blockmap
-            artifacts/**/latest*.yml
-            artifacts/**/app-update.yml
+            artifacts/**/*.AppImage
