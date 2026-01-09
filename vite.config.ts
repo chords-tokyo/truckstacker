@@ -6,6 +6,7 @@ import vuetify from 'vite-plugin-vuetify'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  base: './', // ★追加：Electron(file://)向けに必須級
   plugins: [
     vue(),
     vuetify({ autoImport: true }),
