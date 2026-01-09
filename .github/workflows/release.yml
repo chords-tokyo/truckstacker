@@ -6,7 +6,6 @@ on:
     tags:
       - "v*"
 
-# Release 作成・アップロードに必要
 permissions:
   contents: write
 
@@ -39,7 +38,7 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      # --- macOS: p12 をファイル化（electron-builder の CSC_LINK に渡す） ---
+      # --- macOS: p12 をファイル化 ---
       - name: Prepare macOS signing certificate
         if: matrix.platform == 'mac'
         shell: bash
@@ -57,10 +56,11 @@ jobs:
           CSC_LINK: ./certificate.p12
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PWD }}
 
-          # notarize（★変数名が重要）
+          # notarize（本命 + 互換）
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
         run: npm run release
 
       - name: Cleanup certificate

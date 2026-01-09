@@ -19,6 +19,9 @@
     }
   ],
   "mac": {
+    "notarize": {
+      "teamId": "4X5Z32W694"
+    },
     "target": [
       { "target": "dmg", "arch": ["universal"] },
       { "target": "zip", "arch": ["universal"] }
