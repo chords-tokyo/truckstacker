@@ -6,8 +6,15 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  build:
+  build-and-publish:
     strategy:
       fail-fast: false
       matrix:
@@ -16,9 +23,8 @@ jobs:
             platform: mac
           - os: windows-latest
             platform: win
+
     runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -40,113 +46,30 @@ jobs:
           echo "${{ secrets.APPLE_CERT_P12 }}" | base64 --decode > certificate.p12
           ls -la certificate.p12
 
-      # --- Build (macOS) ---
-      - name: Build (macOS, signed)
+      # --- Build & Publish (macOS) ---
+      - name: Build & Publish (macOS)
         if: matrix.platform == 'mac'
         env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+
+          # codesign
           CSC_LINK: ./certificate.p12
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PWD }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run build
 
-      # --- macOS: notarize + staple (DMG) ---
-      - name: Notarize & Staple DMG (macOS)
-        if: matrix.platform == 'mac'
-        shell: bash
-        env:
+          # notarize (electron-builder が拾う想定の変数名)
           APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -euo pipefail
-
-          echo "== outputs =="
-          find release -maxdepth 6 -type f \( -name "*.dmg" -o -name "*.zip" \) -print || true
-
-          DMG="$(find release -maxdepth 6 -type f -name "*-Mac-*-Installer.dmg" | head -n 1)"
-          echo "DMG=$DMG"
-          test -n "$DMG"
-
-          echo "== submit notarization =="
-          xcrun notarytool submit "$DMG" \
-            --apple-id "$APPLE_ID" \
-            --team-id "$APPLE_TEAM_ID" \
-            --password "$APPLE_PASSWORD" \
-            --wait
-
-          echo "== staple & validate =="
-          xcrun stapler staple "$DMG"
-          xcrun stapler validate "$DMG"
-
-          echo "== gatekeeper assess (app inside dmg) =="
-          MOUNT_DIR="$(mktemp -d /tmp/mnt.XXXXXX)"
-          hdiutil attach "$DMG" -nobrowse -mountpoint "$MOUNT_DIR"
-          APP_PATH="$(find "$MOUNT_DIR" -maxdepth 2 -type d -name "*.app" | head -n 1)"
-          echo "APP_PATH=$APP_PATH"
-          test -n "$APP_PATH"
-          spctl -a -vvv --type execute "$APP_PATH"
-          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
-          hdiutil detach "$MOUNT_DIR"
-          rm -rf "$MOUNT_DIR"
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        run: npm run release
 
       - name: Cleanup certificate
         if: matrix.platform == 'mac'
         shell: bash
         run: rm -f certificate.p12
 
-      # --- Build (Windows) ---
-      - name: Build (Windows)
+      # --- Build & Publish (Windows) ---
+      - name: Build & Publish (Windows)
         if: matrix.platform == 'win'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run build
-
-      # --- 成果物を artifact に退避 ---
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: artifacts-${{ matrix.platform }}
-          path: |
-            release/**/*.dmg
-            release/**/*.zip
-            release/**/*.exe
-            release/**/*.AppImage
-          if-no-files-found: error
-
-  release:
-    runs-on: ubuntu-latest
-    needs: build
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download artifacts (mac)
-        uses: actions/download-artifact@v4
-        with:
-          name: artifacts-mac
-          path: artifacts
-
-      - name: Download artifacts (win)
-        uses: actions/download-artifact@v4
-        with:
-          name: artifacts-win
-          path: artifacts
-
-      - name: List files
-        run: |
-          echo "== artifacts =="
-          find artifacts -type f -maxdepth 8 -print
-
-      - name: Upload artifacts to GitHub Release (draft)
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: "truckstacker ${{ github.ref_name }}"
-          body: "Auto-built for macOS (universal, signed & notarized) and Windows."
-          draft: true
-          prerelease: false
-          files: |
-            artifacts/**/*.dmg
-            artifacts/**/*.zip
-            artifacts/**/*.exe
-            artifacts/**/*.AppImage
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+        run: npm run release
