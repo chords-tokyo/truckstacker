@@ -3,6 +3,7 @@ import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs/promises'
+import { autoUpdater } from 'electron-updater'
 
 // const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -140,6 +141,9 @@ function createWindow() {
     // win.loadFile('dist/index.html')
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
+
+  // アプリ起動後にチェック
+  autoUpdater.checkForUpdatesAndNotify()
 }
 
 // アプリ起動時の処理

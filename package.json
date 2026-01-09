@@ -1,16 +1,18 @@
 {
   "name": "truckstacker",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.9",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build:bundles": "vue-tsc && vite build",
-    "build": "vue-tsc && vite build && electron-builder -c electron-builder.json5 --publish never",
+    "build:local": "vue-tsc && vite build && electron-builder -c electron-builder.json5 --publish never",
+    "release": "vue-tsc && vite build && electron-builder -c electron-builder.json5 --publish always",
     "preview": "vite preview"
   },
   "dependencies": {
     "@mdi/font": "^7.4.47",
+    "electron-updater": "^6.7.3",
     "vue": "^3.4.21",
     "vuetify": "^3.11.6"
   },

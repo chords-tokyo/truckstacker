@@ -8,10 +8,15 @@
     "output": "release/${version}"
   },
   "files": [
-    "dist",
-    "dist-electron"
+    "dist"
   ],
-  "publish": null,
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "chords-tokyo",
+      "repo": "truckstacker"
+    }
+  ],
   "mac": {
     "target": [
       { "target": "dmg", "arch": ["universal"] },
