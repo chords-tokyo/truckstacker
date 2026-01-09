@@ -7,12 +7,23 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# dependencies
+node_modules/
+
+# build outputs
+dist/
+dist-electron/
+release/
+dist-ssr/
 *.local
 
-# Editor directories and files
+# installer artifacts
+*.dmg
+*.zip
+*.exe
+*.AppImage
+
+# Editor / OS
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -22,10 +33,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
-# electron-builder outputs
-release
-*.dmg
-*.zip
-*.exe
-*.AppImage
