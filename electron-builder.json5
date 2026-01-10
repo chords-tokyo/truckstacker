@@ -19,11 +19,6 @@
       "releaseType": "release"
     }
   ],
-  "updater": {
-    "provider": "github",
-    "owner": "chords-tokyo",
-    "repo": "truckstacker"
-  },
   "mac": {
     "notarize": {
       "teamId": "4X5Z32W694"
