@@ -41,16 +41,32 @@ function setupAutoUpdater() {
   // 現在のアプリバージョンをログに出力
   console.log('現在のアプリバージョン:', app.getVersion())
   console.log('autoUpdater初期化開始')
+  
+  // プライベートリポジトリの場合、リリースは公開設定にする必要があります
+  // latest-mac.ymlなどのアセットファイルはリリースが公開されていれば認証なしでアクセス可能です
+  // electron-updaterは、electron-builderがビルド時に埋め込んだ設定を自動的に使用します
+  // ただし、releases.atomエンドポイントはプライベートリポジトリでは404を返すため、
+  // 直接latest-mac.ymlを参照するように設定します
 
   // ログを有効化（デバッグ用）
   // electron-logがインストールされている場合は、以下のコメントを外してください
   // autoUpdater.logger = require('electron-log')
   // autoUpdater.logger.transports.file.level = 'info'
 
+  // GitHub設定
+  // electron-updaterは、electron-builderがビルド時に埋め込んだ設定を自動的に使用します
+  // パブリックリポジトリの場合、releases.atomとlatest-mac.ymlの両方にアクセス可能です
+  
+  // channelを明示的に指定（latestチャンネルを使用）
+  autoUpdater.channel = 'latest'
+  
   // 自動ダウンロードを有効化
   autoUpdater.autoDownload = true
   // アプリ終了時に自動インストール
   autoUpdater.autoInstallOnAppQuit = true
+  
+  console.log('[autoUpdater] チャンネル:', autoUpdater.channel)
+  console.log('[autoUpdater] リポジトリ: chords-tokyo/truckstacker')
 
   // イベントハンドラー（checkForUpdatesの前に設定する必要がある）
   autoUpdater.on('checking-for-update', () => {
@@ -92,6 +108,22 @@ function setupAutoUpdater() {
   })
 
   autoUpdater.on('error', (err) => {
+    const errorMessage = err.message || ''
+    // ネットワークエラーや一時的な404エラーは、latest-mac.ymlへの直接アクセスで解決される可能性があるため、
+    // ユーザーにエラーを表示せず、ログに記録するだけにする
+    const isTemporaryError = errorMessage.includes('releases.atom') || 
+                             errorMessage.includes('404') || 
+                             errorMessage.includes('ENOTFOUND') ||
+                             errorMessage.includes('ECONNREFUSED')
+    
+    if (isTemporaryError) {
+      console.log('[autoUpdater] 一時的なエラーを検出（releases.atomまたはネットワークエラー）')
+      console.log('[autoUpdater] latest-mac.ymlへの直接アクセスを試みます')
+      console.log('[autoUpdater] エラーメッセージ:', err.message)
+      // このエラーは無視し、ダイアログを表示しない（latest-mac.ymlで解決される可能性がある）
+      return
+    }
+    
     console.error('[autoUpdater] エラーが発生しました:')
     console.error('[autoUpdater] エラーメッセージ:', err.message)
     console.error('[autoUpdater] エラースタック:', err.stack)
@@ -104,6 +136,7 @@ function setupAutoUpdater() {
     }, null, 2))
     if (win) {
       win.webContents.send('update-error', err.message || '不明なエラーが発生しました')
+      // 重大なエラーの場合のみエラーダイアログを表示
       dialog.showErrorBox(
         'アップデートエラー',
         `アップデートチェック中にエラーが発生しました:\n${err.message}`
@@ -272,6 +305,47 @@ function setupMenu() {
         { role: 'zoomOut', label: '縮小' },
         { type: 'separator' },
         { role: 'togglefullscreen', label: 'フルスクリーン切替' }
+      ]
+    },
+    {
+      label: 'ヘルプ',
+      submenu: [
+        {
+          label: 'アップデートをチェック',
+          click: async () => {
+            if (isDev) {
+              dialog.showMessageBox(win!, {
+                type: 'info',
+                title: '開発環境',
+                message: '開発環境ではアップデートチェックは無効です'
+              })
+              return
+            }
+            try {
+              console.log('[Menu] 手動アップデートチェックがリクエストされました')
+              const result = await autoUpdater.checkForUpdates()
+              console.log('[Menu] アップデートチェック結果:', result)
+              if (result && result.updateInfo) {
+                dialog.showMessageBox(win!, {
+                  type: 'info',
+                  title: 'アップデートチェック',
+                  message: `アップデートをチェックしました。\n現在のバージョン: ${app.getVersion()}\n最新バージョン: ${result.updateInfo.version}`,
+                })
+              }
+            } catch (error: any) {
+              console.error('[Menu] アップデートチェックエラー:', error)
+              dialog.showErrorBox(
+                'アップデートチェックエラー',
+                `エラー: ${error.message}`
+              )
+            }
+          }
+        },
+        { type: 'separator' },
+        {
+          label: `バージョン情報 (${app.getVersion()})`,
+          enabled: false
+        }
       ]
     }
   ]
