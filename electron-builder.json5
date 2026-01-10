@@ -15,7 +15,8 @@
     {
       "provider": "github",
       "owner": "chords-tokyo",
-      "repo": "truckstacker"
+      "repo": "truckstacker",
+      "releaseType": "release"
     }
   ],
   "mac": {
