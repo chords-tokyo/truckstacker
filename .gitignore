@@ -23,6 +23,10 @@ dist-ssr/
 *.exe
 *.AppImage
 
+# Tauri (no longer used - migrated to Electron)
+src-tauri/
+target/
+
 # Editor / OS
 .vscode/*
 !.vscode/extensions.json
