@@ -1,8 +1,26 @@
-import { defineConfig } from 'vite'
+import { defineConfig, Plugin } from 'vite'
 import path from 'node:path'
+import { readFileSync } from 'node:fs'
 import electron from 'vite-plugin-electron/simple'
 import vue from '@vitejs/plugin-vue'
 import vuetify from 'vite-plugin-vuetify'
+
+// package.jsonからバージョンを読み込む
+const packageJson = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'))
+const version = packageJson.version
+
+// HTMLのタイトルにバージョンを注入するプラグイン
+function htmlVersionPlugin(): Plugin {
+  return {
+    name: 'html-version-plugin',
+    transformIndexHtml(html) {
+      return html.replace(
+        /<title>.*?<\/title>/,
+        `<title>TruckStacker ${version}</title>`
+      )
+    },
+  }
+}
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -10,6 +28,7 @@ export default defineConfig({
   plugins: [
     vue(),
     vuetify({ autoImport: true }),
+    htmlVersionPlugin(),
     electron({
       main: {
         // Shortcut of `build.lib.entry`.
