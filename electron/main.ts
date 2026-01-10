@@ -38,6 +38,10 @@ function setupAutoUpdater() {
     return
   }
 
+  // 現在のアプリバージョンをログに出力
+  console.log('現在のアプリバージョン:', app.getVersion())
+  console.log('autoUpdater初期化開始')
+
   // ログを有効化（デバッグ用）
   // electron-logがインストールされている場合は、以下のコメントを外してください
   // autoUpdater.logger = require('electron-log')
@@ -48,57 +52,80 @@ function setupAutoUpdater() {
   // アプリ終了時に自動インストール
   autoUpdater.autoInstallOnAppQuit = true
 
-  // 初回チェック（アプリ起動時）
-  autoUpdater.checkForUpdatesAndNotify().catch((err) => {
-    console.error('アップデートチェックに失敗しました:', err)
-  })
-
-  // 定期的にチェック（1時間ごと）
-  setInterval(() => {
-    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
-      console.error('定期アップデートチェックに失敗しました:', err)
-    })
-  }, 60 * 60 * 1000) // 1時間ごと
-
-  // イベントハンドラー
+  // イベントハンドラー（checkForUpdatesの前に設定する必要がある）
   autoUpdater.on('checking-for-update', () => {
-    console.log('アップデートをチェック中...')
+    console.log('[autoUpdater] アップデートをチェック中...')
+    console.log('[autoUpdater] 現在のバージョン:', app.getVersion())
+    if (win) {
+      win.webContents.send('update-checking')
+    }
   })
 
   autoUpdater.on('update-available', (info) => {
-    console.log('アップデートが利用可能です:', info.version)
+    console.log('[autoUpdater] アップデートが利用可能です!')
+    console.log('[autoUpdater] 新しいバージョン:', info.version)
+    console.log('[autoUpdater] リリースノート:', info.releaseNotes)
+    console.log('[autoUpdater] 詳細情報:', JSON.stringify(info, null, 2))
     if (win) {
       win.webContents.send('update-available', info)
+      dialog.showMessageBox(win, {
+        type: 'info',
+        title: 'アップデートが利用可能です',
+        message: `バージョン ${info.version} が利用可能です`,
+        detail: 'アップデートをダウンロードしますか？',
+        buttons: ['ダウンロード', '後で'],
+        defaultId: 0,
+        cancelId: 1
+      }).catch((err) => {
+        console.error('ダイアログ表示エラー:', err)
+      })
     }
   })
 
   autoUpdater.on('update-not-available', (info) => {
-    console.log('アップデートはありません。最新版です:', info.version)
+    console.log('[autoUpdater] アップデートはありません')
+    console.log('[autoUpdater] 最新バージョン:', info.version)
+    console.log('[autoUpdater] 詳細情報:', JSON.stringify(info, null, 2))
+    if (win) {
+      win.webContents.send('update-not-available', info)
+    }
   })
 
   autoUpdater.on('error', (err) => {
-    console.error('アップデートエラー:', err)
-    console.error('エラー詳細:', {
+    console.error('[autoUpdater] エラーが発生しました:')
+    console.error('[autoUpdater] エラーメッセージ:', err.message)
+    console.error('[autoUpdater] エラースタック:', err.stack)
+    console.error('[autoUpdater] エラー詳細:', JSON.stringify({
       message: err.message,
       stack: err.stack,
       code: (err as any).code,
-      errno: (err as any).errno
-    })
+      errno: (err as any).errno,
+      name: err.name
+    }, null, 2))
     if (win) {
       win.webContents.send('update-error', err.message || '不明なエラーが発生しました')
+      dialog.showErrorBox(
+        'アップデートエラー',
+        `アップデートチェック中にエラーが発生しました:\n${err.message}`
+      )
     }
   })
 
   autoUpdater.on('download-progress', (progressObj) => {
-    const message = `ダウンロード中: ${Math.round(progressObj.percent)}%`
-    console.log(message)
+    const percent = Math.round(progressObj.percent)
+    const transferred = Math.round(progressObj.transferred / 1024 / 1024 * 100) / 100
+    const total = Math.round(progressObj.total / 1024 / 1024 * 100) / 100
+    console.log(`[autoUpdater] ダウンロード進捗: ${percent}% (${transferred}MB / ${total}MB)`)
     if (win) {
       win.webContents.send('update-download-progress', progressObj)
     }
   })
 
   autoUpdater.on('update-downloaded', (info) => {
-    console.log('アップデートのダウンロードが完了しました:', info.version)
+    console.log('[autoUpdater] アップデートのダウンロードが完了しました!')
+    console.log('[autoUpdater] バージョン:', info.version)
+    console.log('[autoUpdater] リリース日:', info.releaseDate)
+    console.log('[autoUpdater] 詳細情報:', JSON.stringify(info, null, 2))
     if (win) {
       win.webContents.send('update-downloaded', info)
       // ダイアログを表示してユーザーに確認
@@ -112,11 +139,34 @@ function setupAutoUpdater() {
         cancelId: 1
       }).then((result) => {
         if (result.response === 0) {
+          console.log('[autoUpdater] アプリを再起動してアップデートをインストールします')
           autoUpdater.quitAndInstall(false, true)
+        } else {
+          console.log('[autoUpdater] ユーザーが「後で」を選択しました')
         }
+      }).catch((err) => {
+        console.error('ダイアログ表示エラー:', err)
       })
     }
   })
+
+  // 初回チェック（アプリ起動時、少し遅延させてウィンドウが完全に読み込まれるのを待つ）
+  setTimeout(() => {
+    console.log('[autoUpdater] 初回アップデートチェックを開始します...')
+    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+      console.error('[autoUpdater] 初回アップデートチェックに失敗しました:', err)
+      console.error('[autoUpdater] エラー詳細:', JSON.stringify(err, Object.getOwnPropertyNames(err), 2))
+    })
+  }, 3000) // 3秒待つ
+
+  // 定期的にチェック（1時間ごと）
+  setInterval(() => {
+    console.log('[autoUpdater] 定期アップデートチェックを開始します...')
+    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+      console.error('[autoUpdater] 定期アップデートチェックに失敗しました:', err)
+      console.error('[autoUpdater] エラー詳細:', JSON.stringify(err, Object.getOwnPropertyNames(err), 2))
+    })
+  }, 60 * 60 * 1000) // 1時間ごと
 }
 
 // IPCハンドラーの設定
@@ -153,6 +203,27 @@ function setupIpcHandlers() {
     if (!win) return { canceled: true }
     const result = await dialog.showSaveDialog(win, options)
     return result
+  })
+
+  // 現在のアプリバージョンを取得
+  ipcMain.handle('get-app-version', async () => {
+    return app.getVersion()
+  })
+
+  // 手動でアップデートをチェック
+  ipcMain.handle('check-for-updates', async () => {
+    if (isDev) {
+      return { success: false, error: '開発環境ではアップデートチェックは無効です' }
+    }
+    try {
+      console.log('[IPC] 手動アップデートチェックがリクエストされました')
+      const result = await autoUpdater.checkForUpdates()
+      console.log('[IPC] アップデートチェック結果:', result)
+      return { success: true, result }
+    } catch (error: any) {
+      console.error('[IPC] アップデートチェックエラー:', error)
+      return { success: false, error: error.message }
+    }
   })
 }
 
