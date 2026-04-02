@@ -1502,10 +1502,12 @@ const onSavePlacement = async () => {
       alert('保存をキャンセルしました')
       return
     }
-    // 配置と選択荷台IDをまとめて保存
+    // 配置と選択荷台IDをまとめて保存（荷台1・2とも）
     const saveObj = {
       selectedTruckBedId: selectedTruckBedId.value,
+      selectedTruckBedId2: selectedTruckBedId2.value,
       placedEquipments: placedEquipments.value,
+      placedEquipments2: placedEquipments2.value,
     }
     const writeResult = await electronAPI.writeFile(result.filePath, JSON.stringify(saveObj, null, 2))
     if (writeResult.success) {
@@ -1550,8 +1552,20 @@ const onLoadPlacement = async () => {
       if (Array.isArray(obj.placedEquipments)) {
         placedEquipments.value = obj.placedEquipments
       }
+      if (Array.isArray(obj.placedEquipments2)) {
+        placedEquipments2.value = obj.placedEquipments2
+      } else if ('placedEquipments' in obj && !('placedEquipments2' in obj)) {
+        // 旧ファイル: 荷台2のみリセット
+        placedEquipments2.value = []
+      }
       if ('selectedTruckBedId' in obj) {
         selectedTruckBedId.value = obj.selectedTruckBedId
+      }
+      if ('selectedTruckBedId2' in obj) {
+        selectedTruckBedId2.value = obj.selectedTruckBedId2
+      } else if ('placedEquipments' in obj) {
+        // 旧ファイル（荷台2の選択が無い形式）
+        selectedTruckBedId2.value = null
       }
     } else {
       throw new Error('不正なデータ形式')
